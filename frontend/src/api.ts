@@ -1,5 +1,8 @@
 import type {
   AnswerPayload,
+  MembershipState,
+  RetainedConstraints,
+  RemovalRequest,
   CloseRoundResult,
   CandidateDraft,
   ConstraintsPayload,
@@ -114,6 +117,33 @@ export interface MenuImageResult {
 }
 
 export const api = {
+  membership(id: number, token: string) {
+    return request<MembershipState>(`/negotiations/${id}/me/membership`, { token });
+  },
+  leave(id: number, token: string, version: number) {
+    return request<void>(`/negotiations/${id}/me/leave`, { method: "POST", token, body: { expected_membership_version: version, acknowledged: true } });
+  },
+  requestRemoval(id: number, target: number, token: string, version: number, reason: string) {
+    return request<RemovalRequest>(`/negotiations/${id}/members/${target}/removal-requests`, { method: "POST", token, body: { expected_membership_version: version, reason } });
+  },
+  authorizeRemoval(id: number, rid: number, token: string, version: number, approve: boolean) {
+    return request<RemovalRequest>(`/negotiations/${id}/removal-requests/${rid}/me/authorization`, { method: "POST", token, body: { expected_membership_version: version, approve, consequences_acknowledged: true } });
+  },
+  cancelRemoval(id: number, rid: number, token: string, version: number) {
+    return request<void>(`/negotiations/${id}/removal-requests/${rid}/cancel`, { method: "POST", token, body: { expected_membership_version: version } });
+  },
+  markUnresponsive(id: number, target: number, token: string, version: number) {
+    return request<void>(`/negotiations/${id}/members/${target}/unresponsive`, { method: "POST", token, body: { expected_membership_version: version } });
+  },
+  returnToActive(id: number, token: string) {
+    return request<void>(`/negotiations/${id}/me/return`, { method: "POST", token });
+  },
+  retainedConstraints(id: number, token: string) {
+    return request<RetainedConstraints>(`/negotiations/${id}/me/retained-constraints`, { token });
+  },
+  withdrawRetained(id: number, cid: string, token: string, version: number) {
+    return request<RetainedConstraints>(`/negotiations/${id}/me/retained-constraints/${encodeURIComponent(cid)}/withdraw`, { method: "POST", token, body: { expected_preference_version: version, acknowledged: true } });
+  },
   parseMenuImage(imageBase64: string, mimeType: "image/jpeg" | "image/png" | "image/webp") {
     return request<MenuImageResult>("/menu/parse-image", {
       method: "POST",

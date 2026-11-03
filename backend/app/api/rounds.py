@@ -24,7 +24,7 @@ def close_round(
     member: Member = Depends(current_member),
     db: Session = Depends(get_db),
 ) -> CloseRoundView:
-    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True)
+    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True, populate_existing=True)
     if negotiation is None:
         require_negotiation(db, negotiation_id)
     if round_no != negotiation.round_no:

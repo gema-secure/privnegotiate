@@ -85,6 +85,7 @@ class RoundSnapshot:
     answers: tuple
     previous: PreviousResult | None
     new_explicit_evidence: bool
+    membership_version: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,9 +163,12 @@ def _new_explicit_evidence(
 
 
 def begin_round_close(
-    db: Session, negotiation: Negotiation, actor: Member
+    db: Session, negotiation: Negotiation, actor: Member, *, commit: bool = True
 ) -> RoundSnapshot:
     """第一阶段事务：标 CLOSING、冻结截止与版本；迟到回答此后被拒绝。"""
+    negotiation = db.get(Negotiation, negotiation.id, with_for_update=True, populate_existing=True)
+    from app.engine.membership import require_participant
+    actor = require_participant(db, negotiation, actor)
     if negotiation.status not in {"ASKING", "ANSWERING", "RETRY_OR_REVIEW"}:
         raise conflict("ROUND_NOT_CLOSABLE", f"当前状态 {negotiation.status} 不能封轮")
 
@@ -174,6 +178,8 @@ def begin_round_close(
             Member.negotiation_id == negotiation.id, Member.active.is_(True)
         )
     ).all()
+    if any(m.bottomline_status == "pending" for m in member_rows):
+        raise conflict("BOTTOMLINE_PENDING", "参与成员底线尚未收齐，不能封轮")
     if actor.role != "initiator":
         if not (
             collection_complete(db, negotiation.id, round_no)
@@ -201,6 +207,7 @@ def begin_round_close(
         .where(Candidate.negotiation_id == negotiation.id)
         .order_by(Candidate.public_id)
     ).all()
+    negotiation.closing_job_version = negotiation.state_version
     constraints = db.scalars(
         select(ConstraintRow).where(
             ConstraintRow.negotiation_id == negotiation.id,
@@ -223,11 +230,15 @@ def begin_round_close(
         constraints=constraint_dtos(constraints),
         answers=answer_observations(answers),
         previous=_previous(previous),
+        membership_version=negotiation.membership_version,
         new_explicit_evidence=_new_explicit_evidence(
             db, negotiation.id, previous.input_event_cutoff if previous else 0
         ),
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return snapshot
 
 
@@ -441,14 +452,18 @@ def _audit_record(
 
 
 def commit_round(
-    db: Session, snapshot: RoundSnapshot, computation: Computation
+    db: Session, snapshot: RoundSnapshot, computation: Computation, *, commit: bool = True
 ) -> dict[str, Any]:
     """第三阶段事务：状态/版本 CAS，唯一约束保证只提交一次。"""
-    negotiation = db.get(Negotiation, snapshot.negotiation_id, with_for_update=True)
+    negotiation = db.get(Negotiation, snapshot.negotiation_id, with_for_update=True, populate_existing=True)
     if (
         negotiation is None
         or negotiation.status != "CLOSING"
-        or negotiation.state_version != snapshot.state_version
+        or negotiation.round_no != snapshot.round_no
+        or negotiation.constraint_version != snapshot.constraint_version
+        or negotiation.decision_config_version != snapshot.decision_config_version
+        or negotiation.membership_version != snapshot.membership_version
+        or negotiation.closing_job_version != snapshot.state_version
     ):
         raise conflict("ROUND_COMMIT_RACE", "封轮任务已失效，请重新读取状态")
 
@@ -460,7 +475,10 @@ def commit_round(
             "FEASIBILITY_FAILED",
             {"round_no": snapshot.round_no, "detail": computation.message},
         )
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return {
             "round_no": snapshot.round_no,
             "negotiation_status": negotiation.status,
@@ -480,7 +498,10 @@ def commit_round(
                 "detail": computation.message,
             },
         )
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return {
             "round_no": snapshot.round_no,
             "negotiation_status": negotiation.status,
@@ -588,7 +609,10 @@ def commit_round(
             "stopping_reason": stopping_reason,
         },
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return {
         "round_no": snapshot.round_no,
         "negotiation_status": negotiation.status,

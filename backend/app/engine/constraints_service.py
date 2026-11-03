@@ -48,7 +48,8 @@ def _insert(
         constraint_id=constraint_id,
         kind=kind,
         scope=scope,
-        owner_member_id=owner_member_id,
+        # DSL 的 public 表示作用范围；数据库另保留提出者用于本人撤回权限。
+        owner_member_id=None if kind is ConstraintKind.EXCLUDE_ITEM else owner_member_id,
         confirmed_version=version,
         **payload,
     )
@@ -142,6 +143,12 @@ def confirm_member_constraints(
         if constraint_id in seen:
             raise invalid("CONSTRAINT_ID_DUPLICATE", "constraint_id 不能重复")
         seen.add(constraint_id)
+        collision = db.scalars(select(ConfirmedConstraint).where(
+            ConfirmedConstraint.negotiation_id == negotiation.id,
+            ConfirmedConstraint.constraint_id == constraint_id,
+        )).first()
+        if collision is not None and collision.owner_member_id != member.id:
+            raise invalid("CONSTRAINT_ID_INVALID", "请使用本人底线标识")
         payload: dict = {}
         if draft.kind in (
             ConstraintKind.EXCLUDE_ITEM,
@@ -159,7 +166,7 @@ def confirm_member_constraints(
             negotiation,
             constraint_id=constraint_id,
             kind=ConstraintKind(draft.kind.value),
-            scope=ConstraintScope.MEMBER,
+            scope=(ConstraintScope.PUBLIC if draft.kind.value == "exclude_item" else ConstraintScope.MEMBER),
             owner_member_id=member.id,
             payload=payload,
             version=next_version,
@@ -184,8 +191,8 @@ def invalidate_confirmations(
             ResultConfirmation.negotiation_id == negotiation.id
         )
     ).all()
-    for row in rows:
-        db.delete(row)
+    # 不删除确认历史；有效性由 decision_config_version 与 result_version 决定。
+    rows = [row for row in rows if row.decision_config_version != negotiation.decision_config_version]
     if rows:
         from app.engine.events import append_event
 

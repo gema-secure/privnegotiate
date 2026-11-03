@@ -153,7 +153,7 @@ onMounted(() => {
       <div class="page-intro">
         <span class="private-label"><AppIcon name="shield" :size="14" /> 明确表态，不默认同意</span>
         <h1>方案稳定了，想听听你的确认。</h1>
-        <p>稳定不代表同意。只有每位成员针对同一版本明确接受，才标记为全员确认。</p>
+        <p>稳定不代表同意。只有当前参与成员针对同一版本明确接受，才标记为当前参与成员已确认。</p>
       </div>
 
       <section v-if="!recommendation" class="panel empty-state">
@@ -272,8 +272,8 @@ onMounted(() => {
         <section v-if="pub.status === 'FINALIZED'" class="panel mt16">
           <div class="between">
             <div>
-              <h3>全员已确认</h3>
-              <p class="hint mt8">所有成员都接受了方案 v{{ recommendation.result_version }}。</p>
+              <h3>当前参与成员已确认</h3>
+              <p class="hint mt8">当前参与成员都接受了方案 v{{ recommendation.result_version }}。</p>
             </div>
             <router-link :to="`/n/${id}/result`" class="btn primary">查看最终方案</router-link>
           </div>

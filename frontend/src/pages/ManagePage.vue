@@ -200,7 +200,7 @@ onMounted(refresh);
         <p>你可以调整公共条件、处理获准分享的顾虑。个人底线和完整回答始终归成员本人。</p>
       </div>
 
-      <section v-if="inviteLink" class="panel">
+      <section v-if="inviteLink && !pub.membership?.frozen" class="panel">
         <div class="between panel-header">
           <div>
             <h2>邀请成员</h2>

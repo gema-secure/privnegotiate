@@ -82,7 +82,7 @@ def test_public_whitelist_is_same_for_member_and_initiator(api):
         assert set(data) == {
             "negotiation_id", "title", "status", "round_no", "conditions",
             "candidates", "recommendation", "recommendation_pending_reason",
-            "pending_action",
+            "pending_action", "membership",
         }
         assert set(data["conditions"]) == {
             "budget_cents", "exact_count", "round_limit", "category_limits",

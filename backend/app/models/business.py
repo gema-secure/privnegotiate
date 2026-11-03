@@ -51,6 +51,9 @@ class Negotiation(Base):
         Integer, nullable=False, default=1
     )
     active_result_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    membership_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    membership_frozen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    closing_job_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     algorithm_profile: Mapped[str] = mapped_column(
         String(32), nullable=False, default="mean_fair_v1"
     )
@@ -110,6 +113,9 @@ class Member(Base):
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="member")
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    membership_status: Mapped[str] = mapped_column(String(24), nullable=False, default="ACTIVE")
+    response_status: Mapped[str] = mapped_column(String(24), nullable=False, default="ACTIVE")
+    token_revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     preference_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     bottomline_status: Mapped[str] = mapped_column(
         String(24), nullable=False, default="pending"
@@ -117,6 +123,21 @@ class Member(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+class RemovalRequest(Base):
+    __tablename__ = "removal_request"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    negotiation_id: Mapped[int] = mapped_column(ForeignKey("negotiation.id"), nullable=False)
+    target_member_id: Mapped[int] = mapped_column(ForeignKey("member.id"), nullable=False)
+    requested_by: Mapped[int] = mapped_column(ForeignKey("member.id"), nullable=False)
+    membership_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    eligible_member_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False)
+    votes: Mapped[dict[str, bool]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
 class ConfirmedConstraint(Base):

@@ -57,7 +57,7 @@ def constraint_dtos(rows: Iterable[ConstraintRow]) -> tuple[ConfirmedConstraint,
                 constraint_id=row.constraint_id,
                 kind=ConstraintKind(row.kind),
                 scope=ConstraintScope(row.scope),
-                owner_member_id=row.owner_member_id,
+                owner_member_id=None if row.kind == "exclude_item" else row.owner_member_id,
                 candidate_ids=tuple(payload.get("candidate_ids") or ()),
                 category=payload.get("category"),
                 attributes=dict(payload.get("attributes") or {}),
@@ -97,8 +97,9 @@ def answer_observations(rows: Iterable[QuestionAnswer]) -> tuple[AnswerObservati
 def active_answers(db: Session, negotiation_id: int) -> list[QuestionAnswer]:
     return list(
         db.scalars(
-            select(QuestionAnswer)
+            select(QuestionAnswer).join(Member, Member.id == QuestionAnswer.member_id)
             .where(
+                Member.active.is_(True),
                 QuestionAnswer.negotiation_id == negotiation_id,
                 QuestionAnswer.invalidated_at.is_(None),
             )

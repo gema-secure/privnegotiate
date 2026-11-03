@@ -62,7 +62,7 @@ def project_negotiation(
     db: Session, client: Any, negotiation_id: int, *, ttl: int | None = None
 ) -> int:
     """把协商当前投影写入 Redis；缓存丢失后的重建调用同一函数。返回实际写入数。"""
-    negotiation = db.get(Negotiation, negotiation_id)
+    negotiation = db.get(Negotiation, negotiation_id, populate_existing=True)
     if negotiation is None:
         return 0
     ttl = settings.redis_ttl_seconds if ttl is None else ttl
@@ -75,11 +75,14 @@ def project_negotiation(
 
     members = db.scalars(
         select(Member).where(
-            Member.negotiation_id == negotiation_id, Member.active.is_(True)
-        )
+            Member.negotiation_id == negotiation_id
+        ).execution_options(populate_existing=True)
     ).all()
     for member in members:
-        member_json = build_my_view(db, negotiation, member).model_dump_json()
+        member_json = (build_my_view(db, negotiation, member).model_dump_json()
+                       if member.active and not member.token_revoked
+                       else json.dumps({"membership_status": member.membership_status,
+                                        "access": "revoked" if member.token_revoked else "retained_constraints_only"}))
         if write_snapshot(
             client, member_key(negotiation_id, member.id), version, member_json, ttl
         ):

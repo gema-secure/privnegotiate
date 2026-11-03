@@ -58,6 +58,15 @@ def start_round(
         )
     ).all()
 
+    if not members:
+        negotiation.active_result_version = None
+        negotiation.status = "CLOSED_UNCONFIRMED"
+        return negotiation.status
+    if any(member.bottomline_status == "pending" for member in members):
+        negotiation.active_result_version = None
+        negotiation.status = "COLLECTING_BOTTOMLINE"
+        return negotiation.status
+
     negotiation.status = "CHECKING_FEASIBILITY"
     try:
         model = compile_constraints(
@@ -96,6 +105,7 @@ def start_round(
     if result.status is SolveStatus.INFEASIBLE:
         negotiation.status = "INFEASIBLE"
     elif result.status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE):
+        negotiation.membership_frozen = True
         next_round = negotiation.round_no + 1
         candidate_tuple = candidate_dtos(candidates)
         member_tuple = member_dtos(members)

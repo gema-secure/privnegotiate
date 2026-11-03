@@ -290,7 +290,7 @@ const nextAction = computed<NextAction | null>(() => {
     case "FINALIZED":
       return {
         title: "大家都明确接受了这份方案",
-        text: "全员针对同一版本完成确认，可以查看最终方案。",
+        text: "当前参与成员针对同一版本完成确认，可以查看最终方案。",
         label: "查看最终方案",
         to: `${base}/result`,
         icon: "check",

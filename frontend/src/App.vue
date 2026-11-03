@@ -35,6 +35,7 @@ const navItems = computed<NavItem[]>(() => {
     { key: "board", label: "协商对话", icon: "chat", to: `/n/${id}` },
     { key: "answer", label: "私下作答", icon: "edit", to: `/n/${id}/me/answer` },
     { key: "history", label: "我的选择链", icon: "clock", to: `/n/${id}/me/history` },
+    { key: "members", label: "成员与退出", icon: "users", to: `/n/${id}/members` },
     { key: "bottomlines", label: "我的底线", icon: "shield", to: `/n/${id}/me/bottomlines` },
   ];
   if (role === "initiator") {

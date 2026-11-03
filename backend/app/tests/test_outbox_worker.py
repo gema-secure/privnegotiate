@@ -157,7 +157,7 @@ def test_rebuild_unknown_negotiation_is_noop(fake_redis):
     from app.tests.test_api_flow import _candidates  # noqa: F401  确认测试模块可导入
 
     class _NullSession:
-        def get(self, model, key):
+        def get(self, model, key, **kwargs):
             return None
 
     assert worker.project_negotiation(_NullSession(), fake_redis, 424242) == 0

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.concerns import router as concerns_router
 from app.api.health import router as health_router
+from app.api.membership import router as membership_router
 from app.api.me import router as me_router
 from app.api.menu import router as menu_router
 from app.api.negotiations import router as negotiations_router
@@ -22,6 +23,7 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(negotiations_router)
 app.include_router(me_router)
+app.include_router(membership_router)
 app.include_router(rounds_router)
 app.include_router(concerns_router)
 app.include_router(menu_router)

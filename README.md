@@ -16,6 +16,8 @@
 
 本项目的做法是把偏好收集与方案求解分离：成员只在本人视角作答，系统在服务端完成约束编译与组合求解，公共视野只看到候选、推荐与整体阶段。
 
+成员治理和强制移除授权已实现，规则、接口边界与部署迁移见 [MEMBER_LIFECYCLE.md](MEMBER_LIFECYCLE.md)。
+
 ## 核心流程
 
 1. **发起**：创建协商，导入候选清单（单次 13–30 项）、预算与数量约束、整组禁选项。
@@ -49,7 +51,7 @@ backend/
     llm/           MaaS 三入口（可整体关闭）
     workers/       outbox → Redis 投影 worker
     simulation/    模拟实验：生成器、作答者、指标、网格
-    tests/         pytest 测试（134 项）
+    tests/         pytest 测试（207 项）
   alembic/         数据库迁移
   Dockerfile
 frontend/
@@ -107,7 +109,7 @@ cd d:/learning/ict/privnegotiate
 .venv/Scripts/python.exe -m pytest backend/app/tests -q
 ```
 
-当前基线：134 项全部通过，覆盖约束编译、n≤12 全枚举对照、偏好数值检查、权限越权、幂等与失败路径，以及公共进度接口的访问边界（`test_public_access.py`）。
+当前基线：207 项全部通过，覆盖约束编译、n≤12 全枚举对照、偏好数值检查、权限越权、幂等与失败路径，以及公共进度接口的访问边界（`test_public_access.py`）。
 
 ## 模拟实验
 
