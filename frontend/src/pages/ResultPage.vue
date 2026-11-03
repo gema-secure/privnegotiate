@@ -8,7 +8,7 @@ import { api, errorMessage } from "../api";
 import { statusLabel, yuan } from "../format";
 import { detectScenario, SCENARIO_VOICE } from "../scenario";
 import { shareOrDownloadCard } from "../shareCard";
-import { loadSession } from "../session";
+import { getSession, loadSession } from "../session";
 import type { PublicNegotiation } from "../types";
 
 const route = useRoute();
@@ -86,8 +86,17 @@ const planText = computed(() => {
 async function refresh() {
   error.value = "";
   try {
-    pub.value = await api.publicView(id);
+    const identity = getSession(id);
+    if (!identity) {
+      pub.value = null;
+      fallbackText.value = "";
+      error.value = "协商结果仅本协商成员可见，请使用自己的成员身份进入。";
+      return;
+    }
+    pub.value = await api.publicView(id, identity.token);
   } catch (err) {
+    pub.value = null;
+    fallbackText.value = "";
     error.value = errorMessage(err);
   } finally {
     loading.value = false;

@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { showConfirmDialog, showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
-import { api, errorMessage } from "../api";
+import { ApiError, api, errorMessage } from "../api";
 import { statusLabel, statusTone, yuan } from "../format";
 import { TERMINAL_STATUSES, usePolling } from "../polling";
 import { detectScenario, iconForCategory, paletteFor, SCENARIO_VOICE } from "../scenario";
@@ -165,7 +165,7 @@ const nextAction = computed<NextAction | null>(() => {
   if (!invited.value) {
     return {
       title: "用你的独立邀请进入",
-      text: "公共看板可以匿名查看。要参与作答或确认，请使用发起者发给你的邀请链接。",
+      text: "公共进度仅本协商成员可见，请使用自己的成员身份进入。",
       label: "使用邀请链接加入",
       to: "/",
       icon: "link",
@@ -349,27 +349,32 @@ const canCloseRound = computed(
 
 async function refresh() {
   error.value = "";
-  // 公共视图先行：即使个人令牌失效/过期，看板与轮询仍持续工作
-  try {
-    pub.value = await api.publicView(id);
-  } catch (err) {
-    error.value = errorMessage(err);
-    loading.value = false;
-    return;
-  }
-  if (!token.value) {
+  const memberToken = token.value;
+  if (!memberToken) {
+    pub.value = null;
+    me.value = null;
+    history.value = [];
+    error.value = "公共进度仅本协商成员可见，请使用自己的成员身份进入。";
     loading.value = false;
     return;
   }
   try {
-    const [myState, historyEntries] = await Promise.all([
-      api.myState(id, token.value),
-      api.history(id, token.value),
+    const [publicState, myState, entries] = await Promise.all([
+      api.publicView(id, memberToken),
+      api.myState(id, memberToken),
+      api.history(id, memberToken),
     ]);
+    pub.value = publicState;
     me.value = myState;
-    history.value = historyEntries;
-  } catch {
-    // 个人态拉取失败不阻塞公共数据；下一轮轮询自动重试
+    history.value = entries;
+  } catch (err) {
+    // 鉴权失败清空旧数据；临时网络故障保留界面以继续轮询重试。
+    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      pub.value = null;
+      me.value = null;
+      history.value = [];
+    }
+    error.value = errorMessage(err);
   } finally {
     loading.value = false;
   }

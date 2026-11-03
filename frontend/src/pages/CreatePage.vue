@@ -19,7 +19,7 @@ import {
 } from "../menuImport";
 import { listMenus, removeMenu, saveMenu, type MenuTemplate } from "../menuLibrary";
 import { presetByKey, SCENARIO_PRESETS, type ScenarioPreset } from "../scenario";
-import { saveSession } from "../session";
+import { getSession, saveSession } from "../session";
 
 interface DraftRow {
   key: number;
@@ -309,7 +309,12 @@ async function prefillFromPrevious() {
   const from = Number(route.query.from);
   if (!Number.isInteger(from) || from <= 0) return;
   try {
-    const pub = await api.publicView(from);
+    const identity = getSession(from);
+    if (!identity) {
+      importError.value = "请使用原协商的成员身份读取候选与条件。";
+      return;
+    }
+    const pub = await api.publicView(from, identity.token);
     replayedFrom.value = from;
     form.title = pub.title;
     form.budget = yuan(pub.conditions.budget_cents);

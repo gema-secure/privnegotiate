@@ -109,7 +109,7 @@ async function refresh() {
     const [myState, entries, publicView] = await Promise.all([
       api.myState(id, token.value),
       api.history(id, token.value),
-      api.publicView(id),
+      api.publicView(id, token.value),
     ]);
     me.value = myState;
     history.value = entries;

@@ -131,7 +131,7 @@ def test_multi_member_round_idempotency_and_finalize(api):
     assert settled.json()["negotiation_status"] == "BEST_EFFORT"
 
     result_version = settled.json()["result_version"]
-    public = client.get(f"/negotiations/{negotiation_id}/public").json()
+    public = client.get(f"/negotiations/{negotiation_id}/public", headers=headers["a"]).json()
     assert public["recommendation"]["result_version"] == result_version
     assert public["pending_action"] == "waiting_confirmation"
 
@@ -160,7 +160,7 @@ def test_multi_member_round_idempotency_and_finalize(api):
         headers=headers["b"],
     )
     assert final.status_code == 200, final.text
-    public = client.get(f"/negotiations/{negotiation_id}/public").json()
+    public = client.get(f"/negotiations/{negotiation_id}/public", headers=headers["a"]).json()
     assert public["status"] == "FINALIZED"
     assert public["pending_action"] == "none"
     assert "member_token" not in public

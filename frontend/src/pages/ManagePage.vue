@@ -71,7 +71,7 @@ async function refresh() {
   error.value = "";
   try {
     const [publicView, myState] = await Promise.all([
-      api.publicView(id),
+      api.publicView(id, token.value),
       api.myState(id, token.value),
     ]);
     pub.value = publicView;

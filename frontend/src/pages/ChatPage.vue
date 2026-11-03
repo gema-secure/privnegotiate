@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { showConfirmDialog, showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
 import MessageBubble from "../components/MessageBubble.vue";
-import { api, errorMessage } from "../api";
+import { ApiError, api, errorMessage } from "../api";
 import { statusLabel, yuan } from "../format";
 import { TERMINAL_STATUSES, usePolling } from "../polling";
 import { deriveMessages } from "../chat/derive";
@@ -239,26 +239,32 @@ async function closeRoundFromChat() {
 /* ---------- 数据与轮询 ---------- */
 async function refresh() {
   error.value = "";
-  try {
-    pub.value = await api.publicView(id);
-  } catch (err) {
-    error.value = errorMessage(err);
-    loading.value = false;
-    return;
-  }
-  if (!token.value) {
+  const memberToken = token.value;
+  if (!memberToken) {
+    pub.value = null;
+    me.value = null;
+    history.value = [];
+    error.value = "公共进度仅本协商成员可见，请使用自己的成员身份进入。";
     loading.value = false;
     return;
   }
   try {
-    const [myState, entries] = await Promise.all([
-      api.myState(id, token.value),
-      api.history(id, token.value),
+    const [publicState, myState, entries] = await Promise.all([
+      api.publicView(id, memberToken),
+      api.myState(id, memberToken),
+      api.history(id, memberToken),
     ]);
+    pub.value = publicState;
     me.value = myState;
     history.value = entries;
-  } catch {
-    // 个人态失败不阻塞公共对话
+  } catch (err) {
+    // 鉴权失败清空旧数据；临时网络故障保留界面以继续轮询重试。
+    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      pub.value = null;
+      me.value = null;
+      history.value = [];
+    }
+    error.value = errorMessage(err);
   } finally {
     loading.value = false;
   }
@@ -337,7 +343,7 @@ onMounted(() => {
     <div class="chat-dock">
       <!-- 未加入 -->
       <template v-if="!invited">
-        <div class="dock-q"><AppIcon name="lock" :size="13" /> 你正在旁听公共对话</div>
+        <div class="dock-q"><AppIcon name="lock" :size="13" /> 公共进度仅成员可见</div>
         <div class="chat-chips">
           <router-link to="/#join" class="chat-chip">使用邀请链接加入</router-link>
         </div>

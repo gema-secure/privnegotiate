@@ -129,8 +129,8 @@ export const api = {
       body,
     });
   },
-  publicView(negotiationId: number) {
-    return request<PublicNegotiation>(`/negotiations/${negotiationId}/public`);
+  publicView(negotiationId: number, token: string) {
+    return request<PublicNegotiation>(`/negotiations/${negotiationId}/public`, { token });
   },
   myState(negotiationId: number, token: string) {
     return request<MyState>(`/negotiations/${negotiationId}/me`, { token });

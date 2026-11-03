@@ -49,7 +49,7 @@ backend/
     llm/           MaaS 三入口（可整体关闭）
     workers/       outbox → Redis 投影 worker
     simulation/    模拟实验：生成器、作答者、指标、网格
-    tests/         pytest 测试（127 项）
+    tests/         pytest 测试（134 项）
   alembic/         数据库迁移
   Dockerfile
 frontend/
@@ -107,7 +107,7 @@ cd d:/learning/ict/privnegotiate
 .venv/Scripts/python.exe -m pytest backend/app/tests -q
 ```
 
-当前基线：127 项全部通过，覆盖约束编译、n≤12 全枚举对照、偏好数值检查、权限越权、幂等与失败路径。
+当前基线：134 项全部通过，覆盖约束编译、n≤12 全枚举对照、偏好数值检查、权限越权、幂等与失败路径，以及公共进度接口的访问边界（`test_public_access.py`）。
 
 ## 模拟实验
 
@@ -132,7 +132,9 @@ cd backend
 
 ## 当前状态与限制
 
-已完成：约束编译与 CP-SAT 求解、偏好估计、挑战池提问、封轮与确认闭环、顾虑流程、outbox 投影、MaaS 三入口降级、菜单导入与识别、前端全流程。
+已完成：约束编译与 CP-SAT 求解、偏好估计、挑战池提问、封轮与确认闭环、顾虑流程、outbox 投影、MaaS 三入口降级、菜单导入与识别、前端全流程、公共进度接口的成员令牌鉴权。
+
+公共进度仅本协商成员可见：`GET /negotiations/{id}/public` 必须携带该协商成员的 Bearer 令牌；无凭证、邀请凭证、无效/停用令牌和跨协商令牌均返回 401。该接口只返回公共字段白名单，不包含他人的回答、理由、底线来源或个人效用。邀请页加入前不预览协商内容；已有成员身份直接复用。
 
 尚未完成，材料中不得声称已完成：
 

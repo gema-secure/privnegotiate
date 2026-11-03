@@ -45,7 +45,9 @@ async function loadSessions() {
   await Promise.all(
     sessions.value.map(async (row) => {
       try {
-        row.pub = await api.publicView(row.negotiationId);
+        const identity = getSession(row.negotiationId);
+        if (!identity) return;
+        row.pub = await api.publicView(row.negotiationId, identity.token);
       } catch {
         row.pub = null;
       }
