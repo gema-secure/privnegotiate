@@ -1,42 +1,79 @@
 name: privnegotiate
 
+x-backend: &backend
+  build: ../backend
+  env_file: ../.env
+  environment: &backend-env
+    APP_ENV: prod
+    INVITE_TOKEN_SECRET: ${INVITE_TOKEN_SECRET:?Set INVITE_TOKEN_SECRET in .env}
+    DATABASE_URL: mysql+pymysql://privnegotiate:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}@mysql:3306/privnegotiate?charset=utf8mb4
+    REDIS_URL: redis://redis:6379/0
+
 services:
-  api:
-    build: ../backend
-    env_file:
-      - ../.env
-    environment:
-      DATABASE_URL: mysql+pymysql://privnegotiate:${MYSQL_PASSWORD:-change-me}@mysql:3306/privnegotiate?charset=utf8mb4
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
+  migrate:
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
     depends_on:
       mysql:
         condition: service_healthy
+
+  api:
+    <<: *backend
+    restart: unless-stopped
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=10)"]
+      interval: 15s
+      timeout: 12s
+      retries: 5
+
+  worker:
+    <<: *backend
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.outbox_projection", "--loop"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ../frontend
+    restart: unless-stopped
+    ports: ["${WEB_PORT:-8080}:80"]
+    depends_on:
+      api:
+        condition: service_healthy
 
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0.45
     environment:
       MYSQL_DATABASE: privnegotiate
       MYSQL_USER: privnegotiate
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
-    volumes:
-      - mysql-data:/var/lib/mysql
+    volumes: ["mysql-data:/var/lib/mysql"]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
 
   redis:
-    image: redis:7
+    image: redis:7.4.2
     command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis-data:/data
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
   mysql-data:

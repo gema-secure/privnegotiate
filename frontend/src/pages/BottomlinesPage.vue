@@ -5,18 +5,14 @@ import { showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
 import { api, errorMessage } from "../api";
 import { yuan } from "../format";
-import { loadSession, session } from "../session";
-import type { MyState, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+
 
 const route = useRoute();
 const router = useRouter();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, {});
 
-const me = ref<MyState | null>(null);
-const pub = ref<PublicNegotiation | null>(null);
-const loading = ref(true);
-const error = ref("");
 const submitting = ref(false);
 
 const exclude = ref<string[]>([]);
@@ -27,7 +23,6 @@ const altCount = ref(1);
 const noExtra = ref(false);
 let initialized = false;
 
-const token = computed(() => session.current?.token ?? null);
 const categories = computed(() => {
   const values = new Set((pub.value?.candidates ?? []).map((item) => item.category));
   return [...values];
@@ -81,24 +76,8 @@ function selectNoExtra() {
 }
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [myState, publicView] = await Promise.all([
-      api.myState(id, token.value),
-      api.publicView(id, token.value),
-    ]);
-    me.value = myState;
-    pub.value = publicView;
-    initialize();
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  initialize();
 }
 
 async function submit() {

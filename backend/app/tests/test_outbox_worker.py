@@ -148,9 +148,14 @@ def test_poison_row_dead_letters_after_max_attempts(api, fake_redis, monkeypatch
         assert all(row.attempts == 1 for row in rows)
 
         worker.process_pending(db, fake_redis)
+        assert all(row.attempts == 1 for row in rows)  # Not due yet.
+        from datetime import timedelta
+        retry_now = max(row.next_retry_at for row in rows) + timedelta(seconds=1)
+        monkeypatch.setattr(worker, "utcnow", lambda: retry_now)
+        worker.process_pending(db, fake_redis)
         rows = db.scalars(select(Outbox).where(Outbox.negotiation_id == negotiation_id)).all()
         assert all(row.status == "failed" for row in rows)
-        assert all("project exploded" in (row.last_error or "") for row in rows)
+        assert all("project exploded" in (row.last_error or "") for row in rows), [row.last_error for row in rows]
 
 
 def test_rebuild_unknown_negotiation_is_noop(fake_redis):
@@ -161,3 +166,27 @@ def test_rebuild_unknown_negotiation_is_noop(fake_redis):
             return None
 
     assert worker.project_negotiation(_NullSession(), fake_redis, 424242) == 0
+
+
+def test_loop_survives_database_failure(api, fake_redis, monkeypatch):
+    import sys
+    from app.db import session
+    client, factory = api
+    calls = []
+    def sessions():
+        calls.append(1)
+        if len(calls) == 1:
+            raise ConnectionError("database temporarily down")
+        return factory()
+    sleeps = []
+    def pause(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            raise KeyboardInterrupt()
+    monkeypatch.setattr(sys, "argv", ["outbox", "--loop"])
+    monkeypatch.setattr(session, "SessionLocal", sessions)
+    monkeypatch.setattr(worker, "get_client", lambda: fake_redis)
+    monkeypatch.setattr(worker.time, "sleep", pause)
+    with pytest.raises(KeyboardInterrupt):
+        worker.main()
+    assert len(calls) == 2

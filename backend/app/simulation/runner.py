@@ -541,11 +541,14 @@ def run_instance(
         optimum_source = source if value is not None else "incumbent"
         return value
 
+    estimated_answer_count = -1
+    estimate = None
     for round_no in range(1, settings.round_limit + 1):
         if settings.drift_round and round_no == settings.drift_round:
             truth = drift_instance(instance, seed, settings.drift_fraction)
         bundle = estimate_bundle(instance, answers, settings)
         estimate = bundle.estimate
+        estimated_answer_count = len(answers)
         mu = _aligned_mu(estimate, instance)
         result = solve_mean_fair(mu, model, solver)
         solver_seconds += result.wall_time or 0.0
@@ -658,7 +661,9 @@ def run_instance(
             stable = True
             break
 
-    estimate = estimate_for(instance, answers, settings)
+    # The last round may have appended answers after its estimate was fitted.
+    if estimate is None or estimated_answer_count != len(answers):
+        estimate = estimate_for(instance, answers, settings)
     final_result = solve_mean_fair(_aligned_mu(estimate, instance), model, solver)
     solver_seconds += final_result.wall_time or 0.0
     if final_result.status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE):

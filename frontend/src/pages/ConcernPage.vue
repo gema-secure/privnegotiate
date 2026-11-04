@@ -5,24 +5,19 @@ import { showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
 import { api, errorMessage } from "../api";
 import { shortDate } from "../format";
-import { loadSession, session } from "../session";
-import type { MyState, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+
 
 const route = useRoute();
 const router = useRouter();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, {});
 
-const pub = ref<PublicNegotiation | null>(null);
-const me = ref<MyState | null>(null);
-const loading = ref(true);
-const error = ref("");
 const submitting = ref(false);
 const acknowledged = ref(false);
 const text = ref("");
 const submitted = ref(false);
 
-const token = computed(() => session.current?.token ?? null);
 const recommendation = computed(() => pub.value?.recommendation ?? null);
 const canSubmit = computed(
   () =>
@@ -35,26 +30,8 @@ const canSubmit = computed(
 const myConcerns = computed(() => me.value?.concerns ?? []);
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [publicView, myState] = await Promise.all([
-      api.publicView(id, token.value),
-      api.myState(id, token.value),
-    ]);
-    pub.value = publicView;
-    me.value = myState;
-    submitted.value = myState.concerns.some(
-      (item) => item.result_version === publicView.recommendation?.result_version,
-    );
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  submitted.value = !!me.value?.concerns.some(item => item.result_version === pub.value?.recommendation?.result_version);
 }
 
 async function submit() {

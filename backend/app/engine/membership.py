@@ -84,16 +84,16 @@ def _reconcile(db: Session, negotiation: Negotiation, actor_id: int, *, owner_le
         # 尚未开轮，维持底线收集；下一次本人提交触发原有可行性检查。
         negotiation.status = "COLLECTING_BOTTOMLINE"
         return
-    from app.engine.closing import begin_round_close, compute_round, commit_round
+    from app.engine.closing import begin_round_close, run_round_computation, commit_round
 
-    # 独立的新轮避免复用旧题包/结果唯一键；整个失效和重算仍在同一事务。
+    # Persist invalidation and frozen inputs before releasing all row locks.
     negotiation.round_no += 1
     negotiation.status = "ASKING"
     actor = db.get(Member, negotiation.owner_member_id)
     db.flush()
-    snapshot = begin_round_close(db, negotiation, actor, commit=False)
-    computation = replace(compute_round(snapshot), stable_count=0)
-    commit_round(db, snapshot, computation, commit=False)
+    snapshot = begin_round_close(db, negotiation, actor)
+    computation = replace(run_round_computation(snapshot), stable_count=0)
+    commit_round(db, snapshot, computation)
 
 
 def _depart(db: Session, negotiation: Negotiation, target: Member, actor: Member, status: str) -> None:

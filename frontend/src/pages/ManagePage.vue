@@ -6,18 +6,15 @@ import AppIcon from "../components/AppIcon.vue";
 import QrCode from "../components/QrCode.vue";
 import { api, errorMessage } from "../api";
 import { parseYuan, shortDate, statusLabel, yuan } from "../format";
-import { loadSession, session } from "../session";
-import type { MyState, OrganizerConcern, PublicNegotiation } from "../types";
+import { session } from "../session";
+import { useNegotiationState } from "../useNegotiationState";
+import type { OrganizerConcern } from "../types";
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, {});
 
-const pub = ref<PublicNegotiation | null>(null);
-const me = ref<MyState | null>(null);
 const concerns = ref<OrganizerConcern[]>([]);
-const loading = ref(true);
-const error = ref("");
 const busy = ref(false);
 
 const action = ref<"continue" | "stop">("continue");
@@ -25,8 +22,6 @@ const extraRounds = ref(1);
 const budgetInput = ref("");
 let budgetInitialized = false;
 
-const token = computed(() => session.current?.token ?? null);
-const isInitiator = computed(() => session.current?.role === "initiator");
 const openConcerns = computed(() => concerns.value.filter((item) => item.status === "open"));
 const decidable = computed(
   () =>
@@ -40,7 +35,7 @@ const decidable = computed(
       "ADJUSTING",
     ].includes(pub.value.status),
 );
-const canRetry = computed(() => pub.value?.status === "RETRY_OR_REVIEW");
+const canRetry = computed(() => ["RETRY_OR_REVIEW", "CLOSING", "CHECKING_FEASIBILITY"].includes(pub.value?.status ?? ""));
 const inviteLink = computed(() => {
   const invite = session.current?.inviteToken;
   if (!invite) return "";
@@ -64,27 +59,8 @@ function initializeBudget() {
 }
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [publicView, myState] = await Promise.all([
-      api.publicView(id, token.value),
-      api.myState(id, token.value),
-    ]);
-    pub.value = publicView;
-    me.value = myState;
-    if (isInitiator.value) {
-      concerns.value = await api.organizerConcerns(id, token.value);
-    }
-    initializeBudget();
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  if (isInitiator.value && token.value && !error.value) { try { concerns.value = await api.organizerConcerns(id, token.value); } catch (err) { error.value = errorMessage(err); } } initializeBudget();
 }
 
 async function retryCompute() {

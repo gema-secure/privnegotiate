@@ -8,16 +8,13 @@ import { api, errorMessage } from "../api";
 import { statusLabel, yuan } from "../format";
 import { detectScenario, SCENARIO_VOICE } from "../scenario";
 import { shareOrDownloadCard } from "../shareCard";
-import { getSession, loadSession } from "../session";
-import type { PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, { personal: false });
 
-const pub = ref<PublicNegotiation | null>(null);
-const loading = ref(true);
-const error = ref("");
 const fallbackText = ref("");
 
 const recommendation = computed(() => pub.value?.recommendation ?? null);
@@ -85,23 +82,8 @@ const planText = computed(() => {
 });
 
 async function refresh() {
-  error.value = "";
-  try {
-    const identity = getSession(id);
-    if (!identity) {
-      pub.value = null;
-      fallbackText.value = "";
-      error.value = "协商结果仅本协商成员可见，请使用自己的成员身份进入。";
-      return;
-    }
-    pub.value = await api.publicView(id, identity.token);
-  } catch (err) {
-    pub.value = null;
-    fallbackText.value = "";
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  if (!pub.value) fallbackText.value = "";
 }
 
 async function copyPlan() {

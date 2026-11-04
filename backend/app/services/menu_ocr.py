@@ -49,6 +49,9 @@ def _normalize_price(value: Any) -> float | None:
 
 
 def _decode_image(image_base64: str, mime_type: str) -> bytes:
+    max_encoded = 4 * ((settings.menu_image_max_bytes + 2) // 3)
+    if len(image_base64) > max_encoded + 64:
+        raise EngineError("MENU_IMAGE_TOO_LARGE", "图片超过大小限制，请压缩后重试。", 413)
     if mime_type not in ALLOWED_MIME:
         raise EngineError(
             "MENU_IMAGE_TYPE_UNSUPPORTED",
@@ -58,6 +61,8 @@ def _decode_image(image_base64: str, mime_type: str) -> bytes:
     payload = image_base64.strip()
     if payload.startswith("data:"):
         payload = payload.split(",", 1)[-1]
+    if len(payload) > max_encoded:
+        raise EngineError("MENU_IMAGE_TOO_LARGE", "图片超过大小限制，请压缩后重试。", 413)
     try:
         data = base64.b64decode(payload, validate=True)
     except (binascii.Error, ValueError):
@@ -128,7 +133,7 @@ def _call_maas(image_data: bytes, mime_type: str) -> tuple[str, str]:
             url,
             json=body,
             headers={"Authorization": f"Bearer {settings.maas_api_key}"},
-            timeout=settings.maas_timeout_seconds,
+            timeout=httpx.Timeout(settings.menu_ocr_timeout_seconds, connect=2.0),
         )
     except httpx.HTTPError:
         raise EngineError(

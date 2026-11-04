@@ -4,27 +4,19 @@ import { useRoute } from "vue-router";
 import { showConfirmDialog, showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
 import MessageBubble from "../components/MessageBubble.vue";
-import { ApiError, api, errorMessage } from "../api";
+import { api, errorMessage } from "../api";
 import { statusLabel, yuan } from "../format";
-import { TERMINAL_STATUSES, usePolling } from "../polling";
+import { TERMINAL_STATUSES } from "../polling";
 import { deriveMessages } from "../chat/derive";
-import { loadSession, session } from "../session";
-import type { MyHistoryEntry, MyState, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+import { requestId } from "../requestId";
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, invited, isInitiator, canCloseRound, refresh, polling } = useNegotiationState(id, { history: true });
 
-const pub = ref<PublicNegotiation | null>(null);
-const me = ref<MyState | null>(null);
-const history = ref<MyHistoryEntry[]>([]);
-const loading = ref(true);
-const error = ref("");
 const busy = ref(false);
 
-const token = computed(() => session.current?.token ?? null);
-const invited = computed(() => !!session.current);
-const isInitiator = computed(() => session.current?.role === "initiator");
 
 const messages = computed(() =>
   pub.value ? deriveMessages(pub.value, me.value, history.value) : [],
@@ -70,7 +62,7 @@ function onThreadScroll() {
 
 /* 新消息到达：贴近底部才自动滚，否则累计未读并显示回底按钮 */
 watch(
-  messages,
+  () => messages.value[messages.value.length - 1]?.id,
   async () => {
     await nextTick();
     if (!threadEl.value) return;
@@ -117,12 +109,6 @@ const needConfirm = computed(
     ["PRIVATE_CONFIRM", "BEST_EFFORT"].includes(pub.value.status),
 );
 const myConfirmed = computed(() => me.value?.confirmation?.decision ?? null);
-const canCloseRound = computed(
-  () =>
-    isInitiator.value &&
-    !!pub.value &&
-    ["ASKING", "ANSWERING"].includes(pub.value.status),
-);
 
 function resetAnswer() {
   answerStep.value = "multi";
@@ -166,7 +152,7 @@ async function submitAnswer(mode: "explicit" | "none" | "skip") {
   try {
     const payload = {
       question_batch_id: batch.question_batch_id,
-      request_id: pendingRequestId || (pendingRequestId = crypto.randomUUID()),
+      request_id: pendingRequestId || (pendingRequestId = requestId()),
       mode: mode === "skip" ? ("skip" as const) : ("explicit" as const),
       evaluated_ids: mode === "skip" ? [] : batchItems.value.map((item) => item.candidate_id),
       acceptable_ids: mode === "explicit" ? picked.value : [],
@@ -237,43 +223,7 @@ async function closeRoundFromChat() {
 }
 
 /* ---------- 数据与轮询 ---------- */
-async function refresh() {
-  error.value = "";
-  const memberToken = token.value;
-  if (!memberToken) {
-    pub.value = null;
-    me.value = null;
-    history.value = [];
-    error.value = "公共进度仅本协商成员可见，请使用自己的成员身份进入。";
-    loading.value = false;
-    return;
-  }
-  try {
-    const [publicState, myState, entries] = await Promise.all([
-      api.publicView(id, memberToken),
-      api.myState(id, memberToken),
-      api.history(id, memberToken),
-    ]);
-    pub.value = publicState;
-    me.value = myState;
-    history.value = entries;
-  } catch (err) {
-    // 鉴权失败清空旧数据；临时网络故障保留界面以继续轮询重试。
-    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-      pub.value = null;
-      me.value = null;
-      history.value = [];
-    }
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
-}
 
-const polling = usePolling(refresh, () => {
-  const status = pub.value?.status;
-  return !!status && !TERMINAL_STATUSES.has(status);
-});
 
 const liveStatus = computed(() => {
   const status = pub.value?.status;

@@ -39,7 +39,7 @@ def authenticated_member(
 
 def current_member(member: Member = Depends(authenticated_member)) -> Member:
     if not member.active or member.membership_status in {"LEFT", "REMOVED"}:
-        raise EngineError("UNAUTHORIZED", "参与权限已失效，仅可管理本人保留的整组禁忌", 401)
+        raise EngineError("PARTICIPATION_ENDED", "参与权限已失效，仅可管理本人保留的整组禁忌", 401)
     return member
 
 

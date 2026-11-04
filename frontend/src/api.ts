@@ -18,7 +18,10 @@ import type {
   SubmitAnswerResult,
 } from "./types";
 
+import { clearInvalidToken } from "./session";
+
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
+export let requestFailureCount = 0;
 
 export class ApiError extends Error {
   readonly code: string;
@@ -59,17 +62,25 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
 
   let response: Response;
+  let text: string;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     response = await fetch(`${BASE}${path}`, {
       method: options.method ?? "GET",
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: controller.signal,
     });
+    text = await response.text();
   } catch {
-    throw new ApiError("NETWORK_ERROR", "网络不可用，请检查连接后重试", 0);
+    requestFailureCount++;
+    throw new ApiError(controller.signal.aborted ? "REQUEST_TIMEOUT" : "NETWORK_ERROR",
+      controller.signal.aborted ? "请求超时，请刷新状态后重试" : "网络不可用，请检查连接后重试", 0);
+  } finally {
+    clearTimeout(timeout);
   }
 
-  const text = await response.text();
   let data: unknown = null;
   if (text) {
     try {
@@ -80,6 +91,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   if (!response.ok) {
+    requestFailureCount++;
     let code = `HTTP_${response.status}`;
     let message = `请求失败（${response.status}）`;
     if (data && typeof data === "object") {
@@ -88,6 +100,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       if (typeof record.message === "string") message = record.message;
       else if (record.detail !== undefined) message = describeDetail(record.detail) || message;
     }
+    if (response.status === 401 && code !== "PARTICIPATION_ENDED" && options.token) clearInvalidToken(options.token);
     throw new ApiError(code, message, response.status);
   }
 
@@ -144,10 +157,11 @@ export const api = {
   withdrawRetained(id: number, cid: string, token: string, version: number) {
     return request<RetainedConstraints>(`/negotiations/${id}/me/retained-constraints/${encodeURIComponent(cid)}/withdraw`, { method: "POST", token, body: { expected_preference_version: version, acknowledged: true } });
   },
-  parseMenuImage(imageBase64: string, mimeType: "image/jpeg" | "image/png" | "image/webp") {
+  parseMenuImage(imageBase64: string, mimeType: "image/jpeg" | "image/png" | "image/webp", token: string) {
     return request<MenuImageResult>("/menu/parse-image", {
       method: "POST",
       body: { image_base64: imageBase64, mime_type: mimeType },
+      token,
     });
   },
   createNegotiation(body: CreateNegotiationBody) {

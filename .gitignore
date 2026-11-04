@@ -1,4 +1,7 @@
 .venv/
+.venv-*/
+.test-tmp*/
+.local/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -21,3 +24,6 @@ coverage/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local tooling state (IDE/agent settings)
+.arts/

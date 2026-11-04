@@ -66,10 +66,4 @@ export function shortDate(iso: string): string {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function requestId(): string {
-  const raw =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random()}`;
-  return raw.replace(/[^A-Za-z0-9]/g, "").slice(0, 40);
-}
+export { requestId } from "./requestId";

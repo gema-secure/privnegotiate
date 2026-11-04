@@ -357,20 +357,28 @@ def test_rebuild_overwrites_departed_private_snapshot_and_survives_cache_loss(ap
     assert cache.store == before
 
 
-def test_membership_transaction_rolls_back_on_compute_failure(api, monkeypatch):
+def test_membership_change_survives_compute_failure_and_can_resume(api, monkeypatch):
     from app.engine import closing
     client, factory = api
     nid, headers, ids, _ = group(client)
     ver = version(client, nid, headers[0])
-    def fail(snapshot):
+    original = closing.compute_round
+    def fail(snapshot, **kwargs):
         raise RuntimeError("simulated process failure before commit")
     monkeypatch.setattr(closing, "compute_round", fail)
     with pytest.raises(RuntimeError):
         depart(client, nid, headers[3], ver)
     with factory() as db:
-        assert db.get(Member, ids[3]).active
-        assert db.get(Negotiation, nid).membership_version == ver
-        assert db.scalars(select(NegotiationEvent).where(NegotiationEvent.type == "MEMBER_LEFT")).first() is None
+        assert not db.get(Member, ids[3]).active
+        negotiation = db.get(Negotiation, nid)
+        assert negotiation.membership_version == ver + 1
+        assert negotiation.status == "CLOSING"
+        round_no = negotiation.round_no
+        assert db.scalars(select(NegotiationEvent).where(NegotiationEvent.type == "MEMBER_LEFT")).first() is not None
+    monkeypatch.setattr(closing, "compute_round", original)
+    response = _close(client, nid, headers[0], round_no)
+    assert response.status_code == 200, response.text
+    assert response.json()["negotiation_status"] != "CLOSING"
 
 
 def test_migration_upgrade_backfills_freeze_and_downgrade(tmp_path, monkeypatch):

@@ -8,11 +8,20 @@ import pytest
 
 from app.core.config import settings
 from app.services import menu_ocr
+from app.api import menu
 
 # 1x1 透明 PNG
 PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
 )
+
+
+@pytest.fixture(autouse=True)
+def authorized_ocr(api, monkeypatch):
+    client, _ = api
+    monkeypatch.setattr(settings, "menu_ocr_access_token", "test-ocr-credential")
+    monkeypatch.setattr(menu, "check_ocr_rate", lambda identity: None)
+    client.headers["Authorization"] = "Bearer test-ocr-credential"
 
 
 def test_not_configured_returns_503(api, monkeypatch):

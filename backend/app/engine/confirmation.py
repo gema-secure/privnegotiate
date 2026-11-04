@@ -250,7 +250,11 @@ def organizer_decision(
     for row in open_concerns:
         row.status = "closed"
     has_rejection = db.scalar(select(ResultConfirmation.id).where(
-        ResultConfirmation.negotiation_id == negotiation.id, ResultConfirmation.accept.is_(False)
+        ResultConfirmation.negotiation_id == negotiation.id, ResultConfirmation.accept.is_(False),
+        ResultConfirmation.result_version == negotiation.active_result_version,
+        ResultConfirmation.decision_config_version == negotiation.decision_config_version,
+        ResultConfirmation.member_id.in_(select(Member.id).where(
+            Member.negotiation_id == negotiation.id, Member.active.is_(True))),
     ).limit(1)) is not None
     negotiation.status = "CLOSED_WITH_CONCERN" if open_concerns or has_rejection else "CLOSED_UNCONFIRMED"
     from app.engine.membership import expire_removals

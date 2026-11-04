@@ -10,6 +10,7 @@ from app.constraints.compiler import ConstraintModel
 from app.constraints.validation import verify_indices
 from app.preference.bounds import UtilityBounds
 from app.solver.cpsat_adapter import solve_mean_fair
+from app.solver.budget import SolveBudget
 from app.solver.mean_fair import (
     SolveResult,
     SolveStatus,
@@ -100,6 +101,7 @@ def compute_safe_bound(
     upper_bound: float | None = None,
     upper_status: str | None = None,
     upper_quantization_bound: float | None = None,
+    budget: SolveBudget | None = None,
 ) -> BoundReport:
     """epsilon_safe=min(1,max(0,UB_h-H_l))，UB_h 必须覆盖整个可行域。"""
     settings = config or SafeBoundConfig()
@@ -123,18 +125,21 @@ def compute_safe_bound(
     message = ""
 
     if top is None:
+        if budget is not None and budget.remaining() <= 0:
+            return _universal_report(bounds, "整轮计算预算已用尽，使用通用上界")
         result = solve_mean_fair(
             bounds.upper,
             model,
             replace(
                 solver_config,
                 quantization_scale=settings.quantization_scale,
-                time_limit_seconds=settings.time_limit_seconds,
+                time_limit_seconds=min(settings.time_limit_seconds, budget.remaining()) if budget else settings.time_limit_seconds,
                 num_search_workers=settings.num_search_workers,
                 random_seed=settings.random_seed,
-                config_version=settings.config_version,
             ),
         )
+        if budget is not None:
+            budget.consume(result.wall_time)
         status = result.status.value
         gap = result.absolute_gap
         if result.status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE) and result.best_bound is not None:

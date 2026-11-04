@@ -19,7 +19,7 @@ import {
 } from "../menuImport";
 import { listMenus, removeMenu, saveMenu, type MenuTemplate } from "../menuLibrary";
 import { presetByKey, SCENARIO_PRESETS, type ScenarioPreset } from "../scenario";
-import { getSession, saveSession } from "../session";
+import { getSession, saveSession, session } from "../session";
 
 interface DraftRow {
   key: number;
@@ -54,6 +54,7 @@ const importNotice = ref("");
 const importing = ref(false);
 const ocrBusy = ref(false);
 const ocrModel = ref("");
+const ocrCredential = ref("");
 
 const templates = ref<MenuTemplate[]>([]);
 const templateName = ref("");
@@ -117,7 +118,7 @@ function removeRow(key: number) {
 async function applyImported(parsed: ParsedMenuRow[]) {
   if (parsed.length > 200) {
     importError.value = `共读到 ${parsed.length} 项，单次最多处理 200 项。请先在菜单中删减后再导入。`;
-    return;
+    return false;
   }
   if (filledRows.value.length) {
     try {
@@ -127,7 +128,7 @@ async function applyImported(parsed: ParsedMenuRow[]) {
         confirmButtonText: "导入并替换",
       });
     } catch {
-      return;
+      return false;
     }
   }
   nextKey = 0;
@@ -141,21 +142,28 @@ async function applyImported(parsed: ParsedMenuRow[]) {
       ? `已导入 ${parsed.length} 项，超过 ${MAX_CANDIDATES} 项上限。请用下方裁剪助手保留 ${MIN_CANDIDATES}–${MAX_CANDIDATES} 项。`
       : `已导入 ${parsed.length} 项。可直接修改，或删减到本次协商需要的范围。`;
   showToast(`已导入 ${parsed.length} 项候选`);
+  return true;
 }
 
-function finishParse(result: { rows: ParsedMenuRow[]; errors: string[] }) {
+async function finishParse(result: { rows: ParsedMenuRow[]; errors: string[] }) {
   if (result.errors.length) {
     importError.value = result.errors.slice(0, 5).join(" ");
     if (result.errors.length > 5) {
       importError.value += ` 另有 ${result.errors.length - 5} 处问题。`;
     }
-    return;
+    if (!result.rows.length) return;
+    try {
+      await showConfirmDialog({ title: "导入有效候选",
+        message: `可导入 ${result.rows.length} 项，跳过 ${result.errors.length} 处问题。${importError.value}`,
+        confirmButtonText: "仅导入有效项" });
+    } catch { return; }
   }
   if (!result.rows.length) {
     importError.value = "没有解析到可用的候选行。";
     return;
   }
-  void applyImported(result.rows);
+  const applied = await applyImported(result.rows);
+  if (applied && result.errors.length) importNotice.value += ` 已跳过 ${result.errors.length} 处问题。`;
 }
 
 async function onFileChange(event: Event) {
@@ -210,11 +218,17 @@ async function onOcrChange(event: Event) {
   }
   ocrBusy.value = true;
   try {
+    const credential = ocrCredential.value.trim() || session.current?.token;
+    if (!credential) {
+      importError.value = "截图识别需要已有成员身份或组织者提供的识别凭证；也可使用文本导入。";
+      return;
+    }
     const dataUrl = await readAsDataUrl(file);
     const base64 = dataUrl.split(",", 2)[1] ?? "";
     const result = await api.parseMenuImage(
       base64,
       file.type as "image/jpeg" | "image/png" | "image/webp",
+      credential,
     );
     ocrModel.value = result.model;
     await applyImported(
@@ -311,7 +325,7 @@ async function prefillFromPrevious() {
   try {
     const identity = getSession(from);
     if (!identity) {
-      importError.value = "请使用原协商的成员身份读取候选与条件。";
+      error.value = "请使用原协商的成员身份读取候选与条件。";
       return;
     }
     const pub = await api.publicView(from, identity.token);
@@ -332,7 +346,7 @@ async function prefillFromPrevious() {
     });
     importNotice.value = `已沿用「${pub.title}」的候选与条件，确认无误后继续。`;
   } catch (err) {
-    importError.value = errorMessage(err);
+    error.value = errorMessage(err);
   }
 }
 
@@ -595,6 +609,9 @@ async function copyLink() {
             </div>
 
             <div class="import-zone">
+              <label class="field">截图识别凭证（已有成员身份可留空）
+                <input v-model="ocrCredential" type="password" autocomplete="off" placeholder="组织者提供的识别凭证" />
+              </label>
               <div class="import-actions">
                 <button type="button" class="btn primary" :disabled="importing" @click="fileInput?.click()">
                   <AppIcon name="share" :size="16" />
