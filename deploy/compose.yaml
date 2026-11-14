@@ -1,42 +1,124 @@
 name: privnegotiate
 
+# 一套编排覆盖两种环境：
+#   本地全量（MySQL/Redis 也起容器）：docker compose --profile local-db up -d --build
+#   云上（RDS + DCS，不启本地数据库）：docker compose up -d --build
+# deploy/.env 同时是 compose 插值源和容器 env_file，启动前必须存在（cp .env.example .env）。
+
+x-app: &app
+  build:
+    context: ../backend
+  env_file:
+    - .env
+  restart: unless-stopped
+
 services:
-  api:
-    build: ../backend
-    env_file:
-      - ../.env
-    environment:
-      DATABASE_URL: mysql+pymysql://privnegotiate:${MYSQL_PASSWORD:-change-me}@mysql:3306/privnegotiate?charset=utf8mb4
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
+  # 一次性迁移任务：源码不自动建表，缺这一步 /healthz 会是 db=ok 而业务接口全 500。
+  # api 与 worker 都等它成功退出后才启动。
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
     depends_on:
       mysql:
         condition: service_healthy
+        required: false
       redis:
         condition: service_started
+        required: false
+
+  api:
+    <<: *app
+    expose:
+      - "8000"
+    environment:
+      # 生产必填：config.py 里有 dev 默认值，不覆盖则邀请令牌可被离线伪造。
+      INVITE_TOKEN_SECRET: ${INVITE_TOKEN_SECRET:?deploy/.env 未设置 INVITE_TOKEN_SECRET，请用 secrets.token_urlsafe(48) 生成后填入}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_started
+        required: false
+    healthcheck:
+      # 不能只看进程存活：/healthz 的 db 字段必须为 ok，否则容器保持不健康、web 不启动。
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json,urllib.request;
+          d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3));
+          raise SystemExit(0 if d.get('db')=='ok' and d.get('redis')=='ok' else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # outbox → Redis 投影 worker：RDS 先落事实，本进程按 state_version 幂等写 Redis。
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.workers.outbox_projection", "--loop"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_started
+        required: false
+
+  # Nginx：托管前端静态产物，并把 /api 反代到 api:8000（去掉 /api 前缀）。
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/nginx/Dockerfile
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   mysql:
+    profiles: ["local-db"]
     image: mysql:8.0
-    environment:
-      MYSQL_DATABASE: privnegotiate
-      MYSQL_USER: privnegotiate
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+    env_file:
+      - .env
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      test:
+        ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
 
   redis:
+    profiles: ["local-db"]
     image: redis:7
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
 volumes:
   mysql-data:

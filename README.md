@@ -58,7 +58,11 @@ frontend/
     components/    候选卡片、消息气泡、二维码等
     chat/          聊天式协商的派生逻辑
 deploy/
-  compose.yaml     API + MySQL + Redis 编排
+  compose.yaml     Nginx + API + worker + migrate + MySQL + Redis 编排
+  nginx/           前端构建与反向代理配置
+  .env.example     容器部署环境变量模板
+  verify.sh        健康检查 + 业务级验收脚本
+  部署说明.md       ECS + RDS + DCS 部署步骤与常见失败点
 experiments/       固定种子实验的原始结果与复现脚本
 ```
 
@@ -97,8 +101,14 @@ npm run dev     # http://127.0.0.1:5173，/api 自动代理到 :8000
 
 ```bash
 cd deploy
-docker compose up --build
+cp .env.example .env    # 填 INVITE_TOKEN_SECRET；本地编排还要让 DATABASE_URL 与 MYSQL_PASSWORD 一致
+docker compose --profile local-db up -d --build
+bash verify.sh http://127.0.0.1
 ```
+
+云上（ECS + RDS + DCS）改用 `docker compose up -d --build`，不启本地 MySQL/Redis。完整步骤、验收标准与常见失败点见 [`deploy/部署说明.md`](deploy/部署说明.md)。
+
+启动链路为 `mysql healthy → migrate(alembic upgrade head) → api + worker → api 健康 → web`。源码不自动建表，跳过迁移会出现 `/healthz` 显示 `db=ok` 而业务接口全部报错。
 
 ## 测试
 
@@ -142,7 +152,7 @@ cd backend
 - 演示模式与真实数据的隔离；
 - 真实 Redis Lua 门控的云上验证；
 - 真人 A/B 试用（模拟实验的真值与估计模型同族，只能验证求解器与管线，不能证明模型适合真人）；
-- 开源所需的 LICENSE 与部署说明。
+- 开源所需的 LICENSE；仓库内已有部署编排与说明，但尚未在真实容器和云上验证。
 
 ## 文档
 
