@@ -15,7 +15,12 @@ TERMINAL_STATUSES = frozenset(
 )
 
 ANSWER_OPEN_STATUSES = frozenset(
-    {NegotiationStatus.ASKING.value, NegotiationStatus.ANSWERING.value}
+    {
+        NegotiationStatus.ASKING.value,
+        NegotiationStatus.ANSWERING.value,
+        # 证据不足时本轮题包会被重开，作答窗口仍然有效
+        NegotiationStatus.RETRY_OR_REVIEW.value,
+    }
 )
 
 CONFIRM_STATUSES = frozenset(

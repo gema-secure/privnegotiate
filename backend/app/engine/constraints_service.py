@@ -142,8 +142,12 @@ def confirm_member_constraints(
         if constraint_id in seen:
             raise invalid("CONSTRAINT_ID_DUPLICATE", "constraint_id 不能重复")
         seen.add(constraint_id)
+        kind = ConstraintKind(draft.kind.value)
+        # 整组避开是公共约束，必须整组生效且不得绑定成员；
+        # 本人不参与与替代要求才是成员级底线，两条路径互不替代。
+        is_group_exclude = kind is ConstraintKind.EXCLUDE_ITEM
         payload: dict = {}
-        if draft.kind in (
+        if kind in (
             ConstraintKind.EXCLUDE_ITEM,
             ConstraintKind.OPT_OUT,
         ):
@@ -158,9 +162,9 @@ def confirm_member_constraints(
             db,
             negotiation,
             constraint_id=constraint_id,
-            kind=ConstraintKind(draft.kind.value),
-            scope=ConstraintScope.MEMBER,
-            owner_member_id=member.id,
+            kind=kind,
+            scope=ConstraintScope.PUBLIC if is_group_exclude else ConstraintScope.MEMBER,
+            owner_member_id=None if is_group_exclude else member.id,
             payload=payload,
             version=next_version,
         )

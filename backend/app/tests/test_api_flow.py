@@ -6,8 +6,15 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
+from app.engine.batches import mark_batches_closed, reopen_batches
 from app.engine.closing import PreviousResult, RoundSnapshot, _stable_count
-from app.models.business import QuestionBatch, utcnow
+from app.models.business import (
+    ConfirmedConstraint,
+    Member,
+    Negotiation,
+    QuestionBatch,
+    utcnow,
+)
 from app.solver.mean_fair import SolveResult, SolveStatus
 
 
@@ -495,3 +502,159 @@ def test_stability_counter_only_advances_on_verified_repeat():
         config_version=1,
     )
     assert _stable_count(_snapshot(first), feasible_only) == 0
+
+
+def test_retry_or_review_reconfirm_does_not_advance_round(api):
+    """RETRY_OR_REVIEW 期间本轮题包仍有效，成员重存底线不得开新一轮。
+
+    状态构造对应 closing.py:471-472——有效答案不足时置 RETRY_OR_REVIEW
+    并重开本轮题包；answers.py:67 也允许该状态下继续作答，
+    因此本轮在语义上仍然有效。
+
+    缺陷：me.py:70 的 open_round 只认 ASKING/ANSWERING，
+    该状态下为 False；而 me.py:71 的"全体非 pending"在成员均已确认后恒为真，
+    于是 start_round 被误触发，batches.py:60-66 会关掉所有 issued 批次
+    （含刚重开的本轮题包），round_no 前移，本轮被静默跳过并消耗一次 round_limit。
+    """
+    client, factory = api
+    negotiation_id, headers = _start(client, round_limit=3)
+
+    started = _me(client, negotiation_id, headers["a"])
+    assert started["round_no"] == 1
+    assert started["question_batch"] is not None
+
+    # 复现"封轮后证据不足、本轮被重开"的真实状态
+    with factory() as session:
+        negotiation = session.get(Negotiation, negotiation_id)
+        assert negotiation is not None
+        mark_batches_closed(session, negotiation_id, 1)
+        session.flush()
+        negotiation.status = "RETRY_OR_REVIEW"
+        reopen_batches(session, negotiation_id, 1)
+        session.commit()
+
+    reopened = _me(client, negotiation_id, headers["a"])
+    assert reopened["status"] == "RETRY_OR_REVIEW"
+    assert reopened["round_no"] == 1
+    assert reopened["question_batch"] is not None
+
+    # 成员重新提交底线：此时全员本就非 pending
+    response = client.post(
+        f"/negotiations/{negotiation_id}/me/constraints",
+        json={"constraints": [], "no_extra_bottomline": True},
+        headers=headers["b"],
+    )
+    assert response.status_code == 200, response.text
+
+    after = _me(client, negotiation_id, headers["a"])
+    assert after["round_no"] == 1, "重存底线不应推进轮次"
+    assert after["status"] == "RETRY_OR_REVIEW", "本轮应仍处于待补充证据状态"
+    assert after["question_batch"] is not None, "本轮题包应仍可作答"
+
+    with factory() as session:
+        next_round = session.scalars(
+            select(QuestionBatch).where(
+                QuestionBatch.negotiation_id == negotiation_id,
+                QuestionBatch.round_no == 2,
+            )
+        ).all()
+        assert next_round == [], "不应生成第 2 轮题包"
+
+        round_one = session.scalars(
+            select(QuestionBatch).where(
+                QuestionBatch.negotiation_id == negotiation_id,
+                QuestionBatch.round_no == 1,
+            )
+        ).all()
+        assert round_one, "第 1 轮题包不应丢失"
+        assert all(row.status == "issued" for row in round_one), (
+            "第 1 轮题包应保持 issued，可继续作答"
+        )
+
+
+def test_group_exclude_is_public_and_applies_to_every_member(api):
+    """整组避开以公共约束落库并全员生效；本人不参与仍是成员级独立路径。"""
+    client, factory = api
+    created = client.post(
+        "/negotiations",
+        json={
+            "title": "周五聚餐",
+            "initiator_name": "组长",
+            "candidates": _candidates(),
+            "budget_cents": 6000,
+            "exact_count": 2,
+            "round_limit": 3,
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    negotiation_id = body["negotiation_id"]
+    joined = client.post(
+        f"/negotiations/{negotiation_id}/members",
+        json={"invite_token": body["invite_token"], "display_name": "小林"},
+    )
+    assert joined.status_code == 201, joined.text
+    headers = {
+        "a": {"Authorization": f"Bearer {body['member_token']}"},
+        "b": {"Authorization": f"Bearer {joined.json()['member_token']}"},
+    }
+
+    group_excluded = [f"c{index:02d}" for index in range(4, 14)]
+    response = client.post(
+        f"/negotiations/{negotiation_id}/me/constraints",
+        json={
+            "constraints": [
+                {"kind": "exclude_item", "candidate_ids": group_excluded},
+                {"kind": "opt_out", "candidate_ids": ["c03"]},
+            ],
+            "no_extra_bottomline": False,
+        },
+        headers=headers["a"],
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "COLLECTING_BOTTOMLINE"
+
+    with factory() as session:
+        rows = session.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == negotiation_id,
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+        initiator = session.scalars(
+            select(Member).where(
+                Member.negotiation_id == negotiation_id,
+                Member.display_name == "组长",
+            )
+        ).one()
+
+    exclude_rows = [row for row in rows if row.kind == "exclude_item"]
+    opt_out_rows = [row for row in rows if row.kind == "opt_out"]
+    assert len(exclude_rows) == 1, "整组避开应作为一条公共约束落库"
+    assert exclude_rows[0].scope == "public"
+    assert exclude_rows[0].owner_member_id is None
+    assert set(exclude_rows[0].payload["candidate_ids"]) == set(group_excluded)
+    assert len(opt_out_rows) == 1, "本人不参与应保持成员级约束"
+    assert opt_out_rows[0].scope == "member"
+    assert opt_out_rows[0].owner_member_id == initiator.id
+
+    finished = client.post(
+        f"/negotiations/{negotiation_id}/me/constraints",
+        json={
+            "constraints": [],
+            "no_extra_bottomline": True,
+            "expected_preference_version": 1,
+        },
+        headers=headers["b"],
+    )
+    assert finished.status_code == 200, finished.text
+
+    batch_a = _me(client, negotiation_id, headers["a"])["question_batch"]
+    batch_b = _me(client, negotiation_id, headers["b"])["question_batch"]
+    assert batch_a is not None and batch_b is not None
+    ids_a = {item["candidate_id"] for item in batch_a["items"]}
+    ids_b = {item["candidate_id"] for item in batch_b["items"]}
+    assert ids_a.isdisjoint(group_excluded), "整组避开应对本人生效"
+    assert ids_b.isdisjoint(group_excluded), "整组避开应对其他成员同样生效"
+    assert ids_a == {"c01", "c02"}, "本人不参与只压缩本人的候选池"
+    assert ids_b == {"c01", "c02", "c03"}, "本人不参与不得污染其他成员"
