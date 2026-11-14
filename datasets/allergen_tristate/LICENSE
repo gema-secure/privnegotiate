@@ -1,0 +1,36 @@
+# 许可说明
+
+## 数据与文档
+
+本目录下由「和议」项目组新增的标注数据（`data/`、`output/`）与文档（`README.md`、`docs/`）采用
+**Creative Commons Attribution 4.0 International（CC BY 4.0）** 许可。
+
+你可以自由共享、改编、商用，但必须给出适当署名、提供许可链接，并说明是否作出修改。
+
+许可全文：https://creativecommons.org/licenses/by/4.0/legalcode
+
+建议署名格式：
+
+```text
+和议项目组. 菜品—过敏原三态数据集 (2026). CC BY 4.0.
+```
+
+## 代码
+
+`scripts/build_dataset.py` 采用 **MIT License**。
+
+## 上游来源
+
+本目录引用的标准、数据库、菜谱与品牌配料表保留各自许可，不因本目录的 CC BY 4.0 而改变：
+
+- GB 7718-2011、GB/T 23779-2009：国家标准公开文本，合理引用。
+- Regulation (EU) No 1169/2011 Annex II：EUR-Lex 再利用政策，署名。
+- 《中国食物成分表（第 6 版）》：版权作品，仅引用结论，不复制表格正文。
+- USDA FoodData Central：Public domain（CC0 1.0）。
+- Open Food Facts：ODbL 1.0。
+- 香港食物安全中心资料：政府网站公开资料，合理引用。
+- 品牌包装配料表：仅记录配料事实，不复制包装设计、商标或宣传语。
+- 菜谱与烹饪文献：合理引用。
+- 市场参考价 P1：本项目人工整理，非权威价格数据，仅用于演示。
+
+完整来源登记见 `data/sources.csv`。

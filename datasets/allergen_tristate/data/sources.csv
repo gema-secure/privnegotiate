@@ -1,0 +1,11 @@
+source_id,title,publisher,year,url,license,usage,credibility
+S1,GB 7718-2011 食品安全国家标准 预包装食品标签通则,中华人民共和国卫生部,2011,https://std.samr.gov.cn/,国家标准公开文本 合理引用,确定中国强制标示的8类致敏物质,A
+S2,GB/T 23779-2009 预包装食品中的致敏原成分,国家标准化管理委员会,2009,https://std.samr.gov.cn/,国家标准公开文本 合理引用,致敏原成分分类与标示口径,A
+S3,Regulation (EU) No 1169/2011 Annex II,European Union,2011,https://eur-lex.europa.eu/eli/reg/2011/1169/oj,EUR-Lex reuse policy with attribution,确定欧盟14类过敏原清单,A
+S4,中国食物成分表 第6版,杨月欣主编 北京大学医学出版社,2018-2019,https://www.chinanutri.cn/,版权作品 仅引用不复制,单一食材的成分与配料性质判断,A
+S5,USDA FoodData Central,US Department of Agriculture,2019,https://fdc.nal.usda.gov/,Public domain CC0 1.0,单一食材成分与配料性质交叉核对,A
+S6,Open Food Facts 包装食品过敏原标签数据库,Open Food Facts contributors,2026,https://world.openfoodfacts.org/data,ODbL 1.0,包装调味料与加工食品的过敏原标签核对,B
+S7,食物致敏物资料,香港食物安全中心,2026,https://www.cfs.gov.hk/,政府网站公开资料 合理引用,致敏物名称与交叉接触说明,A
+S8,市售预包装调味品与加工食品配料表,各品牌产品包装,2026,产品包装,仅记录配料事实 不复制包装设计,酱油 蚝油 豆瓣酱 火锅底料 腌腊制品等复合配料判断,B
+S9,中国菜谱与地方菜烹饪文献,中国财政经济出版社等,1970-2020,无,合理引用,菜品通用配方与配料组成推定,C
+P1,市场参考价,本项目人工整理,2026,无,仅用于演示,菜品参考单价 非过敏原证据 非权威价格数据,D

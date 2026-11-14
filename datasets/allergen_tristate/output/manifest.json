@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "seed": 20261110,
+  "input_sha256": {
+    "allergens.csv": "e06d5cc5fbf13addf05ec03ae545ff144cecd01db7f3b8b7279c06d344edfb18",
+    "dishes.csv": "36dabb3325dbd48180168f0da664e70b840a2c16f0dd5556b979f615cc907657",
+    "ingredients.csv": "72a693e401d2ce298eb50080e24c45704b3423315161c07f8f870a0abc1b27ef",
+    "scenarios.csv": "5cda3f74bd04a93510902dc4a732e9d5b467b7c2e6bef62b71f3460782289116",
+    "sources.csv": "5aed3000fe72ec90e88ace7bc00b7519fae139b2de35a568834047b48f35c032"
+  },
+  "output_sha256": {
+    "dishes_allergen_long.csv": "4f1b174d8f731222fe44b6fc72bcee3671a0ebe043bc3f680a2c401cfeb6ffb3",
+    "dishes_allergen_tristate.csv": "b61b5c55a25e73fbb5e88c272f0ca72f86db07dc785e9e5e7addedc8b51f9a8e",
+    "dishes_allergen_tristate.jsonl": "1d77b7bed3af247d2a957e121b4e84b57cfbf587e24fab58dedd25eb8e9b92b7",
+    "ingredients_allergen_tristate.csv": "813cb325fc4b30030bd902392fe9268e295dcbad120a0763e7226c89b1a9e5f3",
+    "scenarios.json": "62842e4f3ad1e7ab91508e469c896e05e40a74690974d5333481dc126ea75312",
+    "scenarios/SC01.csv": "ed186d98645ad0ec1ae8cd9aec51f4024685e1bf1d6ff564131762f1bb87f5e2",
+    "scenarios/SC02.csv": "08f578c22f7fcdb2f976890534890241f3ead6d0721f97fe09617b57ad8ced4a",
+    "scenarios/SC03.csv": "22de46df9d89d806028a3d85c98069f7b887c59326792a7436d817c844d42059",
+    "scenarios/SC04.csv": "2cebcfcadb454eb7b7129b5337ea219db9018dcee38c91a47cb645933d872439",
+    "scenarios/SC05.csv": "847f09c721aba309181126749cc03fa352cbf8486160c676aa82abbfdd5f22df",
+    "scenarios/SC06.csv": "da95ecbd8a06366cacfff09d750de1c2e395f38e1e9fb3e3e648339ac8c71fed",
+    "scenarios/SC07.csv": "343233444c9ce696b8c016bdf3c7e6dcade5c6879a297e0b5ef606f96617e13c",
+    "scenarios/SC08.csv": "cf15deaabd27d3e7af88c0e6d983148b1bf306f435008e72fa472b3c956e207c",
+    "stats.json": "432eca9f373a199bbd8f6d33e30ebf3341d97cd75ed5aca50506def553869f64"
+  }
+}

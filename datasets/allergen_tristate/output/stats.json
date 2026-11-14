@@ -1,0 +1,882 @@
+{
+  "schema_version": "1.0.0",
+  "seed": 20261110,
+  "counts": {
+    "allergens": 14,
+    "ingredients": 153,
+    "dishes": 184,
+    "scenarios": 8,
+    "sources": 10
+  },
+  "allergen_state_counts": {
+    "gluten": {
+      "CONTAINS": 104,
+      "NOT_CONTAINS": 55,
+      "UNKNOWN": 25
+    },
+    "crustacean": {
+      "CONTAINS": 20,
+      "NOT_CONTAINS": 156,
+      "UNKNOWN": 8
+    },
+    "egg": {
+      "CONTAINS": 49,
+      "NOT_CONTAINS": 118,
+      "UNKNOWN": 17
+    },
+    "fish": {
+      "CONTAINS": 19,
+      "NOT_CONTAINS": 148,
+      "UNKNOWN": 17
+    },
+    "peanut": {
+      "CONTAINS": 9,
+      "NOT_CONTAINS": 161,
+      "UNKNOWN": 14
+    },
+    "soy": {
+      "CONTAINS": 100,
+      "NOT_CONTAINS": 61,
+      "UNKNOWN": 23
+    },
+    "milk": {
+      "CONTAINS": 26,
+      "NOT_CONTAINS": 137,
+      "UNKNOWN": 21
+    },
+    "tree_nut": {
+      "CONTAINS": 3,
+      "NOT_CONTAINS": 167,
+      "UNKNOWN": 14
+    },
+    "sesame": {
+      "CONTAINS": 37,
+      "NOT_CONTAINS": 130,
+      "UNKNOWN": 17
+    },
+    "mollusc": {
+      "CONTAINS": 8,
+      "NOT_CONTAINS": 167,
+      "UNKNOWN": 9
+    },
+    "celery": {
+      "CONTAINS": 1,
+      "NOT_CONTAINS": 172,
+      "UNKNOWN": 11
+    },
+    "mustard": {
+      "CONTAINS": 10,
+      "NOT_CONTAINS": 170,
+      "UNKNOWN": 4
+    },
+    "sulphite": {
+      "CONTAINS": 39,
+      "NOT_CONTAINS": 66,
+      "UNKNOWN": 79
+    },
+    "lupin": {
+      "CONTAINS": 0,
+      "NOT_CONTAINS": 184,
+      "UNKNOWN": 0
+    }
+  },
+  "allergen_unknown_rate": {
+    "gluten": 0.13587,
+    "crustacean": 0.043478,
+    "egg": 0.092391,
+    "fish": 0.092391,
+    "peanut": 0.076087,
+    "soy": 0.125,
+    "milk": 0.11413,
+    "tree_nut": 0.076087,
+    "sesame": 0.092391,
+    "mollusc": 0.048913,
+    "celery": 0.059783,
+    "mustard": 0.021739,
+    "sulphite": 0.429348,
+    "lupin": 0.0
+  },
+  "allergen_positive_dish_count": {
+    "gluten": 104,
+    "crustacean": 20,
+    "egg": 49,
+    "fish": 19,
+    "peanut": 9,
+    "soy": 100,
+    "milk": 26,
+    "tree_nut": 3,
+    "sesame": 37,
+    "mollusc": 8,
+    "celery": 1,
+    "mustard": 10,
+    "sulphite": 39,
+    "lupin": 0
+  },
+  "coverage": {
+    "allergens_with_contains": [
+      "gluten",
+      "crustacean",
+      "egg",
+      "fish",
+      "peanut",
+      "soy",
+      "milk",
+      "tree_nut",
+      "sesame",
+      "mollusc",
+      "celery",
+      "mustard",
+      "sulphite"
+    ],
+    "allergens_without_contains": [
+      "lupin"
+    ],
+    "allergens_with_unknown": [
+      "gluten",
+      "crustacean",
+      "egg",
+      "fish",
+      "peanut",
+      "soy",
+      "milk",
+      "tree_nut",
+      "sesame",
+      "mollusc",
+      "celery",
+      "mustard",
+      "sulphite"
+    ],
+    "allergens_without_unknown": [
+      "lupin"
+    ]
+  },
+  "dish_unknown_count": {
+    "mean": 1.408,
+    "median": 1.0,
+    "max": 13,
+    "min": 0
+  },
+  "dishes_with_any_unknown": 102,
+  "dishes_without_unknown": 82,
+  "credibility_counts": {
+    "A": 53,
+    "B": 108,
+    "C": 23,
+    "D": 0
+  },
+  "manual_review_counts": {
+    "true": 138,
+    "false": 46
+  },
+  "cuisine_counts": {
+    "东北菜": 3,
+    "云贵菜": 3,
+    "家常菜": 17,
+    "川菜": 15,
+    "徽菜": 2,
+    "日料": 14,
+    "早餐": 21,
+    "湘菜": 6,
+    "火锅": 18,
+    "烧烤": 16,
+    "粤菜": 14,
+    "素食": 16,
+    "苏菜": 10,
+    "西北菜": 2,
+    "西餐": 17,
+    "闽菜": 2,
+    "鲁菜": 8
+  },
+  "scenario_summary": {
+    "SC01": {
+      "name": "家庭聚餐",
+      "pool_size": 67,
+      "candidate_count": 24,
+      "mean_unknown_per_candidate": 1.458,
+      "allergen_state_counts": {
+        "gluten": {
+          "CONTAINS": 19,
+          "NOT_CONTAINS": 2,
+          "UNKNOWN": 3
+        },
+        "crustacean": {
+          "CONTAINS": 3,
+          "NOT_CONTAINS": 21,
+          "UNKNOWN": 0
+        },
+        "egg": {
+          "CONTAINS": 6,
+          "NOT_CONTAINS": 14,
+          "UNKNOWN": 4
+        },
+        "fish": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 19,
+          "UNKNOWN": 3
+        },
+        "peanut": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 23,
+          "UNKNOWN": 0
+        },
+        "soy": {
+          "CONTAINS": 19,
+          "NOT_CONTAINS": 3,
+          "UNKNOWN": 2
+        },
+        "milk": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 18,
+          "UNKNOWN": 5
+        },
+        "tree_nut": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 24,
+          "UNKNOWN": 0
+        },
+        "sesame": {
+          "CONTAINS": 7,
+          "NOT_CONTAINS": 16,
+          "UNKNOWN": 1
+        },
+        "mollusc": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 23,
+          "UNKNOWN": 0
+        },
+        "celery": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 21,
+          "UNKNOWN": 3
+        },
+        "mustard": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 24,
+          "UNKNOWN": 0
+        },
+        "sulphite": {
+          "CONTAINS": 8,
+          "NOT_CONTAINS": 2,
+          "UNKNOWN": 14
+        },
+        "lupin": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 24,
+          "UNKNOWN": 0
+        }
+      }
+    },
+    "SC02": {
+      "name": "商务宴请",
+      "pool_size": 32,
+      "candidate_count": 20,
+      "mean_unknown_per_candidate": 1.1,
+      "allergen_state_counts": {
+        "gluten": {
+          "CONTAINS": 18,
+          "NOT_CONTAINS": 0,
+          "UNKNOWN": 2
+        },
+        "crustacean": {
+          "CONTAINS": 6,
+          "NOT_CONTAINS": 14,
+          "UNKNOWN": 0
+        },
+        "egg": {
+          "CONTAINS": 6,
+          "NOT_CONTAINS": 13,
+          "UNKNOWN": 1
+        },
+        "fish": {
+          "CONTAINS": 6,
+          "NOT_CONTAINS": 13,
+          "UNKNOWN": 1
+        },
+        "peanut": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 18,
+          "UNKNOWN": 0
+        },
+        "soy": {
+          "CONTAINS": 18,
+          "NOT_CONTAINS": 2,
+          "UNKNOWN": 0
+        },
+        "milk": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 3
+        },
+        "tree_nut": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 19,
+          "UNKNOWN": 0
+        },
+        "sesame": {
+          "CONTAINS": 8,
+          "NOT_CONTAINS": 10,
+          "UNKNOWN": 2
+        },
+        "mollusc": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 18,
+          "UNKNOWN": 0
+        },
+        "celery": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 19,
+          "UNKNOWN": 1
+        },
+        "mustard": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 20,
+          "UNKNOWN": 0
+        },
+        "sulphite": {
+          "CONTAINS": 8,
+          "NOT_CONTAINS": 0,
+          "UNKNOWN": 12
+        },
+        "lupin": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 20,
+          "UNKNOWN": 0
+        }
+      }
+    },
+    "SC03": {
+      "name": "朋友火锅",
+      "pool_size": 18,
+      "candidate_count": 18,
+      "mean_unknown_per_candidate": 1.222,
+      "allergen_state_counts": {
+        "gluten": {
+          "CONTAINS": 3,
+          "NOT_CONTAINS": 13,
+          "UNKNOWN": 2
+        },
+        "crustacean": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 16,
+          "UNKNOWN": 1
+        },
+        "egg": {
+          "CONTAINS": 4,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 2
+        },
+        "fish": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 2
+        },
+        "peanut": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 1
+        },
+        "soy": {
+          "CONTAINS": 5,
+          "NOT_CONTAINS": 11,
+          "UNKNOWN": 2
+        },
+        "milk": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 16,
+          "UNKNOWN": 2
+        },
+        "tree_nut": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 1
+        },
+        "sesame": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 1
+        },
+        "mollusc": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 1
+        },
+        "celery": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 16,
+          "UNKNOWN": 2
+        },
+        "mustard": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 1
+        },
+        "sulphite": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 14,
+          "UNKNOWN": 4
+        },
+        "lupin": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 18,
+          "UNKNOWN": 0
+        }
+      }
+    },
+    "SC04": {
+      "name": "烧烤夜宵",
+      "pool_size": 17,
+      "candidate_count": 17,
+      "mean_unknown_per_candidate": 1.882,
+      "allergen_state_counts": {
+        "gluten": {
+          "CONTAINS": 10,
+          "NOT_CONTAINS": 4,
+          "UNKNOWN": 3
+        },
+        "crustacean": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 13,
+          "UNKNOWN": 2
+        },
+        "egg": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 1
+        },
+        "fish": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 2
+        },
+        "peanut": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 14,
+          "UNKNOWN": 2
+        },
+        "soy": {
+          "CONTAINS": 8,
+          "NOT_CONTAINS": 5,
+          "UNKNOWN": 4
+        },
+        "milk": {
+          "CONTAINS": 4,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 1
+        },
+        "tree_nut": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 14,
+          "UNKNOWN": 2
+        },
+        "sesame": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 11,
+          "UNKNOWN": 4
+        },
+        "mollusc": {
+          "CONTAINS": 3,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 2
+        },
+        "celery": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 0
+        },
+        "mustard": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 2
+        },
+        "sulphite": {
+          "CONTAINS": 5,
+          "NOT_CONTAINS": 5,
+          "UNKNOWN": 7
+        },
+        "lupin": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 0
+        }
+      }
+    },
+    "SC05": {
+      "name": "日料聚餐",
+      "pool_size": 14,
+      "candidate_count": 14,
+      "mean_unknown_per_candidate": 3.286,
+      "allergen_state_counts": {
+        "gluten": {
+          "CONTAINS": 11,
+          "NOT_CONTAINS": 0,
+          "UNKNOWN": 3
+        },
+        "crustacean": {
+          "CONTAINS": 4,
+          "NOT_CONTAINS": 9,
+          "UNKNOWN": 1
+        },
+        "egg": {
+          "CONTAINS": 6,
+          "NOT_CONTAINS": 6,
+          "UNKNOWN": 2
+        },
+        "fish": {
+          "CONTAINS": 4,
+          "NOT_CONTAINS": 4,
+          "UNKNOWN": 6
+        },
+        "peanut": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 2
+        },
+        "soy": {
+          "CONTAINS": 12,
+          "NOT_CONTAINS": 0,
+          "UNKNOWN": 2
+        },
+        "milk": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 7,
+          "UNKNOWN": 7
+        },
+        "tree_nut": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 2
+        },
+        "sesame": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 10,
+          "UNKNOWN": 2
+        },
+        "mollusc": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 11,
+          "UNKNOWN": 2
+        },
+        "celery": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 9,
+          "UNKNOWN": 5
+        },
+        "mustard": {
+          "CONTAINS": 6,
+          "NOT_CONTAINS": 7,
+          "UNKNOWN": 1
+        },
+        "sulphite": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 2,
+          "UNKNOWN": 11
+        },
+        "lupin": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 14,
+          "UNKNOWN": 0
+        }
+      }
+    },
+    "SC06": {
+      "name": "西餐聚会",
+      "pool_size": 24,
+      "candidate_count": 18,
+      "mean_unknown_per_candidate": 1.444,
+      "allergen_state_counts": {
+        "gluten": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 4
+        },
+        "crustacean": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 2
+        },
+        "egg": {
+          "CONTAINS": 6,
+          "NOT_CONTAINS": 11,
+          "UNKNOWN": 1
+        },
+        "fish": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 16,
+          "UNKNOWN": 1
+        },
+        "peanut": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 3
+        },
+        "soy": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 5
+        },
+        "milk": {
+          "CONTAINS": 10,
+          "NOT_CONTAINS": 6,
+          "UNKNOWN": 2
+        },
+        "tree_nut": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 3
+        },
+        "sesame": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 14,
+          "UNKNOWN": 2
+        },
+        "mollusc": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 2
+        },
+        "celery": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 0
+        },
+        "mustard": {
+          "CONTAINS": 3,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 0
+        },
+        "sulphite": {
+          "CONTAINS": 5,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 1
+        },
+        "lupin": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 18,
+          "UNKNOWN": 0
+        }
+      }
+    },
+    "SC07": {
+      "name": "素食轻食",
+      "pool_size": 35,
+      "candidate_count": 18,
+      "mean_unknown_per_candidate": 1.167,
+      "allergen_state_counts": {
+        "gluten": {
+          "CONTAINS": 7,
+          "NOT_CONTAINS": 10,
+          "UNKNOWN": 1
+        },
+        "crustacean": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 1
+        },
+        "egg": {
+          "CONTAINS": 2,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 1
+        },
+        "fish": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 1
+        },
+        "peanut": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 2
+        },
+        "soy": {
+          "CONTAINS": 6,
+          "NOT_CONTAINS": 9,
+          "UNKNOWN": 3
+        },
+        "milk": {
+          "CONTAINS": 4,
+          "NOT_CONTAINS": 13,
+          "UNKNOWN": 1
+        },
+        "tree_nut": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 2
+        },
+        "sesame": {
+          "CONTAINS": 4,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 2
+        },
+        "mollusc": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 16,
+          "UNKNOWN": 1
+        },
+        "celery": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 17,
+          "UNKNOWN": 0
+        },
+        "mustard": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 18,
+          "UNKNOWN": 0
+        },
+        "sulphite": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 12,
+          "UNKNOWN": 6
+        },
+        "lupin": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 18,
+          "UNKNOWN": 0
+        }
+      }
+    },
+    "SC08": {
+      "name": "早餐下午茶",
+      "pool_size": 34,
+      "candidate_count": 20,
+      "mean_unknown_per_candidate": 1.7,
+      "allergen_state_counts": {
+        "gluten": {
+          "CONTAINS": 8,
+          "NOT_CONTAINS": 9,
+          "UNKNOWN": 3
+        },
+        "crustacean": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 19,
+          "UNKNOWN": 1
+        },
+        "egg": {
+          "CONTAINS": 7,
+          "NOT_CONTAINS": 10,
+          "UNKNOWN": 3
+        },
+        "fish": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 18,
+          "UNKNOWN": 2
+        },
+        "peanut": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 4
+        },
+        "soy": {
+          "CONTAINS": 9,
+          "NOT_CONTAINS": 7,
+          "UNKNOWN": 4
+        },
+        "milk": {
+          "CONTAINS": 5,
+          "NOT_CONTAINS": 13,
+          "UNKNOWN": 2
+        },
+        "tree_nut": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 15,
+          "UNKNOWN": 4
+        },
+        "sesame": {
+          "CONTAINS": 5,
+          "NOT_CONTAINS": 13,
+          "UNKNOWN": 2
+        },
+        "mollusc": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 19,
+          "UNKNOWN": 1
+        },
+        "celery": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 19,
+          "UNKNOWN": 1
+        },
+        "mustard": {
+          "CONTAINS": 1,
+          "NOT_CONTAINS": 19,
+          "UNKNOWN": 0
+        },
+        "sulphite": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 13,
+          "UNKNOWN": 7
+        },
+        "lupin": {
+          "CONTAINS": 0,
+          "NOT_CONTAINS": 20,
+          "UNKNOWN": 0
+        }
+      }
+    }
+  },
+  "price": {
+    "non_null": 184,
+    "missing": 0,
+    "min_cents": 600,
+    "median_cents": 3800,
+    "max_cents": 18800
+  },
+  "source_usage": {
+    "S1": {
+      "allergens": 8,
+      "ingredients": 0,
+      "dishes": 0
+    },
+    "S2": {
+      "allergens": 8,
+      "ingredients": 0,
+      "dishes": 0
+    },
+    "S3": {
+      "allergens": 14,
+      "ingredients": 0,
+      "dishes": 0
+    },
+    "S4": {
+      "allergens": 0,
+      "ingredients": 111,
+      "dishes": 19
+    },
+    "S5": {
+      "allergens": 0,
+      "ingredients": 105,
+      "dishes": 12
+    },
+    "S6": {
+      "allergens": 0,
+      "ingredients": 14,
+      "dishes": 5
+    },
+    "S7": {
+      "allergens": 6,
+      "ingredients": 0,
+      "dishes": 0
+    },
+    "S8": {
+      "allergens": 0,
+      "ingredients": 43,
+      "dishes": 140
+    },
+    "S9": {
+      "allergens": 0,
+      "ingredients": 5,
+      "dishes": 163
+    },
+    "P1": {
+      "allergens": 0,
+      "ingredients": 0,
+      "dishes": 0
+    }
+  },
+  "price_source_usage": {
+    "P1": 184
+  },
+  "warnings": [
+    "以下过敏原在菜品中没有 CONTAINS 正例，只能用于负例或未知例实验：lupin",
+    "以下过敏原没有 UNKNOWN 例，三态覆盖不完整：lupin"
+  ]
+}

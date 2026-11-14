@@ -1,0 +1,15 @@
+code,name_zh,name_en,eu_annex_ii,cn_gb7718_2011,source_ids,note
+gluten,含麸质谷物及其制品,Cereals containing gluten,1,1,S1;S2;S3,小麦 黑麦 大麦 燕麦及其杂交品种
+crustacean,甲壳纲类动物及其制品,Crustaceans,1,1,S1;S2;S3,虾 蟹 龙虾 小龙虾等
+egg,蛋类及其制品,Eggs,1,1,S1;S2;S3,鸡蛋 鸭蛋 咸蛋 皮蛋及蛋制品
+fish,鱼类及其制品,Fish,1,1,S1;S2;S3,淡水鱼 海水鱼 鱼露 鱼糜及鱼汤
+peanut,花生及其制品,Peanuts,1,1,S1;S2;S3,花生 花生酱 花生油
+soy,大豆及其制品,Soybeans,1,1,S1;S2;S3,大豆 豆腐 豆浆 酱油 豆瓣酱 豆豉
+milk,乳及乳制品,Milk,1,1,S1;S2;S3,牛奶 奶油 黄油 奶酪 炼乳 酸奶
+tree_nut,坚果及其制品,Tree nuts,1,1,S1;S2;S3,腰果 核桃 杏仁 松子 榛子 开心果等
+sesame,芝麻及其制品,Sesame seeds,1,0,S3;S7,芝麻 芝麻酱 芝麻油 芝麻粒
+mollusc,软体动物及其制品,Molluscs,1,0,S3;S7,鱿鱼 章鱼 花甲 生蚝 扇贝 鲍鱼 田螺
+celery,芹菜及其制品,Celery,1,0,S3;S7,芹菜 芹菜籽 芹菜粉
+mustard,芥末及其制品,Mustard,1,0,S3;S7,芥末籽 芥末酱 芥末粉
+sulphite,亚硫酸盐（以二氧化硫计超过10mg/kg）,Sulphur dioxide and sulphites,1,0,S3;S7,葡萄酒 啤酒 腌制品 果干 焦糖色
+lupin,羽扇豆及其制品,Lupins,1,0,S3;S7,羽扇豆粉 羽扇豆蛋白
