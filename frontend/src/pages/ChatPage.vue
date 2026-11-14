@@ -340,6 +340,19 @@ onMounted(() => {
       {{ unseenCount }} 条新消息
     </button>
 
+    <router-link
+      v-if="invited && me && me.pending_attribute_checks.length"
+      :to="`/n/${id}/board`"
+      class="chat-attr-alert"
+    >
+      <AppIcon name="warning" :size="14" />
+      <span class="ca-text">
+        <b>{{ me.pending_attribute_checks.length }} 项属性待确认</b>
+        <span>替代要求里有候选的属性未知，未知不会被算作满足；看板中有逐项说明。</span>
+      </span>
+      <AppIcon name="chevron" :size="12" />
+    </router-link>
+
     <div class="chat-dock">
       <!-- 未加入 -->
       <template v-if="!invited">

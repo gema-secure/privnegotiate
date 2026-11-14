@@ -3,10 +3,16 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
+import AttributeChips from "../components/AttributeChips.vue";
 import { api, errorMessage } from "../api";
 import { yuan } from "../format";
 import { loadSession, session } from "../session";
-import type { MyState, PublicNegotiation } from "../types";
+import type {
+  BottomlineParse,
+  BottomlineProposal,
+  MyState,
+  PublicNegotiation,
+} from "../types";
 
 const route = useRoute();
 const router = useRouter();
@@ -26,6 +32,106 @@ const altCategory = ref("");
 const altCount = ref(1);
 const noExtra = ref(false);
 let initialized = false;
+
+/* ---------- 自然语言底线解析（只出提议，不落库） ---------- */
+const nlText = ref("");
+const parsing = ref(false);
+const parseResult = ref<BottomlineParse | null>(null);
+const selectedProposals = ref<boolean[]>([]);
+const applied = ref(false);
+const applyNotice = ref("");
+
+const DEGRADED_REASON: Record<string, string> = {
+  llm_disabled: "AI 文本能力未启用",
+  llm_unavailable: "AI 服务暂时不可用",
+  llm_bad_output: "AI 输出不合规",
+  empty_input: "输入为空",
+  no_valid_proposals: "没有解析出可用的底线提议",
+};
+
+const parseFallback = computed(() => {
+  const result = parseResult.value;
+  if (!result) return false;
+  return result.needs_form || result.degraded || result.proposals.length === 0;
+});
+
+const degradedText = computed(() => {
+  const result = parseResult.value;
+  if (!result) return "";
+  const reason = result.reason ? DEGRADED_REASON[result.reason] ?? result.reason : "";
+  return reason || "未获得可用解析";
+});
+
+const KIND_LABEL: Record<BottomlineProposal["kind"], string> = {
+  exclude_item: "整组避开",
+  opt_out: "本人不参与",
+  require_count: "替代要求",
+};
+
+function proposalNames(proposal: BottomlineProposal): string {
+  return proposal.candidate_ids
+    .map((cid) => pub.value?.candidates.find((item) => item.candidate_id === cid)?.name ?? cid)
+    .join("、");
+}
+
+async function parseBottomline() {
+  if (!token.value || parsing.value) return;
+  const text = nlText.value.trim();
+  if (!text) {
+    showToast("请先描述你的底线");
+    return;
+  }
+  parsing.value = true;
+  parseResult.value = null;
+  applyNotice.value = "";
+  try {
+    const result = await api.parseBottomline(id, token.value, text);
+    parseResult.value = result;
+    selectedProposals.value = result.proposals.map(() => true);
+    applied.value = false;
+    if (result.degraded || result.needs_form || !result.proposals.length) {
+      showToast("AI 辅助不可用，请使用下方结构化表单");
+    }
+  } catch (err) {
+    showToast(errorMessage(err));
+  } finally {
+    parsing.value = false;
+  }
+}
+
+function applyProposals() {
+  const result = parseResult.value;
+  if (!result || applied.value) return;
+  const skipped: string[] = [];
+  result.proposals.forEach((proposal, index) => {
+    if (!selectedProposals.value[index]) return;
+    if (proposal.kind === "exclude_item") {
+      for (const cid of proposal.candidate_ids) {
+        if (!exclude.value.includes(cid)) exclude.value.push(cid);
+        optOut.value = optOut.value.filter((item) => item !== cid);
+      }
+    } else if (proposal.kind === "opt_out") {
+      for (const cid of proposal.candidate_ids) {
+        if (!optOut.value.includes(cid)) optOut.value.push(cid);
+        exclude.value = exclude.value.filter((item) => item !== cid);
+      }
+    } else if (proposal.category) {
+      wantAlternative.value = true;
+      altCategory.value = proposal.category;
+      altCount.value = Math.max(1, proposal.min_count ?? 1);
+    } else {
+      skipped.push(proposal.display_text);
+      return;
+    }
+    noExtra.value = false;
+  });
+  exclude.value = [...new Set(exclude.value)];
+  optOut.value = [...new Set(optOut.value)];
+  applied.value = true;
+  applyNotice.value = skipped.length
+    ? `已填入勾选的提议；以下提议含属性条件，当前表单只支持类别条件，请手工补充：${skipped.join("；")}`
+    : "已填入下方表单。请逐条核对，确认无误后再点击「确认底线」提交。";
+}
 
 const token = computed(() => session.current?.token ?? null);
 const categories = computed(() => {
@@ -183,7 +289,57 @@ onMounted(refresh);
       </div>
 
       <section class="panel">
-        <div class="between panel-header">
+        <div class="nl-parse">
+          <label class="nl-label" for="nl-bottomline">用一句话描述你的底线（可选）</label>
+          <textarea
+            id="nl-bottomline"
+            v-model="nlText"
+            rows="3"
+            maxlength="2000"
+            placeholder="例如：有几道菜我不想吃，另外至少来一道主食。"
+          ></textarea>
+          <div class="nl-actions">
+            <button type="button" class="btn soft small" :disabled="parsing" @click="parseBottomline">
+              {{ parsing ? "解析中…" : "解析为提议" }}
+            </button>
+            <span class="hint">
+              解析只产生提议，不会写入约束；必须由你逐条确认后才提交。失败时直接使用下方手工表单。
+            </span>
+          </div>
+        </div>
+
+        <div v-if="parseFallback" class="notice amber mt12">
+          <AppIcon name="warning" :size="15" />
+          <span>
+            AI 解析未完成（{{ degradedText }}），已回退到结构化表单，请直接手工勾选。
+            这不是解析成功，也不会替你写入任何底线。
+          </span>
+        </div>
+
+        <div v-else-if="parseResult && parseResult.proposals.length" class="nl-proposals mt12">
+          <p class="hint">请逐条确认要采用的提议；未勾选的不会填入表单，填入后仍需你提交确认。</p>
+          <label
+            v-for="(proposal, index) in parseResult.proposals"
+            :key="`${proposal.kind}-${index}`"
+            class="nl-proposal"
+          >
+            <input v-model="selectedProposals[index]" type="checkbox" />
+            <span>
+              <b>{{ KIND_LABEL[proposal.kind] }}</b>
+              {{ proposal.display_text }}
+              <small v-if="proposalNames(proposal)"> · {{ proposalNames(proposal) }}</small>
+            </span>
+          </label>
+          <div class="nl-apply">
+            <button type="button" class="btn primary small" :disabled="applied" @click="applyProposals">
+              {{ applied ? "已填入表单" : "采用勾选的提议" }}
+            </button>
+            <span v-if="parseResult.model" class="hint">解析模型：{{ parseResult.model }}</span>
+          </div>
+          <p v-if="applyNotice" class="hint">{{ applyNotice }}</p>
+        </div>
+
+        <div class="between panel-header mt16">
           <h2>01 · 整组必须避开</h2>
           <span class="badge outline">{{ exclude.length }} 项</span>
         </div>
@@ -203,6 +359,7 @@ onMounted(refresh);
             <span>
               {{ candidate.name }}
               <small>¥{{ yuan(candidate.cost_cents) }} · {{ candidate.category }}</small>
+              <AttributeChips :attributes="candidate.attributes" compact :max="3" />
             </span>
           </label>
         </div>
@@ -229,6 +386,7 @@ onMounted(refresh);
             <span>
               {{ candidate.name }}
               <small>¥{{ yuan(candidate.cost_cents) }} · {{ candidate.category }}</small>
+              <AttributeChips :attributes="candidate.attributes" compact :max="3" />
             </span>
           </label>
         </div>

@@ -1,7 +1,9 @@
 import type {
   AnswerPayload,
   CloseRoundResult,
+  CandidateAttributeInput,
   CandidateDraft,
+  BottomlineParse,
   ConstraintsPayload,
   CreatedNegotiation,
   JoinedMember,
@@ -30,7 +32,7 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH";
   body?: unknown;
   token?: string | null;
 }
@@ -94,6 +96,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 export interface CreateNegotiationBody {
   title: string;
   initiator_name: string;
+  /** 声明的小组人数，后端范围 3–15；低于 3 或超过上限会被拒绝。 */
+  member_count: number;
   candidates: CandidateDraft[];
   budget_cents: number;
   exact_count: number;
@@ -123,6 +127,18 @@ export const api = {
   createNegotiation(body: CreateNegotiationBody) {
     return request<CreatedNegotiation>("/negotiations", { method: "POST", body });
   },
+  /** 发起者专用：人工修正菜品三态属性，只改事实，不改任何成员底线。 */
+  correctCandidateAttributes(
+    negotiationId: number,
+    candidateId: string,
+    token: string,
+    body: { attributes: CandidateAttributeInput[]; reason?: string | null },
+  ) {
+    return request<PublicNegotiation>(
+      `/negotiations/${negotiationId}/candidates/${encodeURIComponent(candidateId)}/attributes`,
+      { method: "POST", body, token },
+    );
+  },
   join(negotiationId: number, body: { invite_token: string; display_name: string }) {
     return request<JoinedMember>(`/negotiations/${negotiationId}/members`, {
       method: "POST",
@@ -132,8 +148,17 @@ export const api = {
   publicView(negotiationId: number, token: string) {
     return request<PublicNegotiation>(`/negotiations/${negotiationId}/public`, { token });
   },
-  myState(negotiationId: number, token: string) {
-    return request<MyState>(`/negotiations/${negotiationId}/me`, { token });
+  myState(negotiationId: number, token: string, wording: "auto" | "template" = "auto") {
+    const query = wording === "template" ? "?wording=template" : "";
+    return request<MyState>(`/negotiations/${negotiationId}/me${query}`, { token });
+  },
+  /** 自然语言底线解析：只返回提议，不写约束；仍须成员确认后走 confirmConstraints。 */
+  parseBottomline(negotiationId: number, token: string, text: string) {
+    return request<BottomlineParse>(`/negotiations/${negotiationId}/me/bottomline/parse`, {
+      method: "POST",
+      body: { text },
+      token,
+    });
   },
   confirmConstraints(negotiationId: number, token: string, body: ConstraintsPayload) {
     return request<MyState>(`/negotiations/${negotiationId}/me/constraints`, {
@@ -191,6 +216,18 @@ export const api = {
     return request<OrganizerConcern[]>(`/negotiations/${negotiationId}/organizer/concerns`, {
       token,
     });
+  },
+  /** 发起者人工修正 AI 摘要；原文不变，来源变为 manual。 */
+  correctConcernSummary(
+    negotiationId: number,
+    concernId: number,
+    token: string,
+    summary: string,
+  ) {
+    return request<OrganizerConcern>(
+      `/negotiations/${negotiationId}/organizer/concerns/${concernId}/summary`,
+      { method: "PATCH", body: { summary }, token },
+    );
   },
   organizerDecision(
     negotiationId: number,

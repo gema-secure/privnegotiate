@@ -3,11 +3,19 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { showConfirmDialog, showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
+import AttributeChips from "../components/AttributeChips.vue";
 import QrCode from "../components/QrCode.vue";
 import { api, errorMessage } from "../api";
 import { parseYuan, shortDate, statusLabel, yuan } from "../format";
 import { loadSession, session } from "../session";
-import type { MyState, OrganizerConcern, PublicNegotiation } from "../types";
+import type {
+  AttributeState,
+  Candidate,
+  CandidateAttributeInput,
+  MyState,
+  OrganizerConcern,
+  PublicNegotiation,
+} from "../types";
 
 const route = useRoute();
 const id = Number(route.params.id);
@@ -46,6 +54,150 @@ const inviteLink = computed(() => {
   if (!invite) return "";
   return `${window.location.origin}/join/${id}/${invite}`;
 });
+
+/* ---------- 候选属性事实（发起者人工修正） ---------- */
+const editingCandidateId = ref<string | null>(null);
+const attrEdits = ref<CandidateAttributeInput[]>([]);
+const newAttrKey = ref("");
+const newAttrState = ref<AttributeState>("present");
+const attrReason = ref("");
+const attrBusy = ref(false);
+
+const ATTR_OPTIONS: Array<{ value: AttributeState; label: string }> = [
+  { value: "present", label: "已知含" },
+  { value: "absent", label: "已知不含" },
+  { value: "unknown", label: "未知" },
+];
+
+const markedCount = computed(
+  () => (pub.value?.candidates ?? []).filter((item) => item.attributes.length > 0).length,
+);
+
+/* ---------- 顾虑摘要（发起者人工修正） ---------- */
+const editingConcernId = ref<number | null>(null);
+const summaryDraft = ref("");
+const summaryBusy = ref(false);
+
+const SUMMARY_SOURCE_LABEL: Record<OrganizerConcern["summary_source"], string> = {
+  llm: "AI 摘要",
+  manual: "人工修正摘要",
+  none: "无摘要",
+};
+
+const CONCERN_REASON: Record<string, string> = {
+  llm_disabled: "AI 文本能力未启用",
+  llm_unavailable: "AI 服务暂时不可用",
+  llm_bad_output: "AI 输出不合规",
+  empty_input: "输入为空",
+};
+
+function concernDegradedText(concern: OrganizerConcern): string {
+  const reason = concern.summary_degraded_reason;
+  const text = reason ? CONCERN_REASON[reason] ?? reason : "";
+  return text ? `（${text}）` : "";
+}
+
+function startEditSummary(concern: OrganizerConcern) {
+  if (editingConcernId.value === concern.concern_id) {
+    editingConcernId.value = null;
+    return;
+  }
+  editingConcernId.value = concern.concern_id;
+  summaryDraft.value = concern.summary ?? "";
+}
+
+async function saveSummary(concern: OrganizerConcern) {
+  if (!token.value || summaryBusy.value) return;
+  const summary = summaryDraft.value.trim();
+  if (!summary) {
+    showToast("摘要不能为空");
+    return;
+  }
+  summaryBusy.value = true;
+  try {
+    const updated = await api.correctConcernSummary(
+      id,
+      concern.concern_id,
+      token.value,
+      summary,
+    );
+    const index = concerns.value.findIndex((item) => item.concern_id === concern.concern_id);
+    if (index >= 0) concerns.value[index] = updated;
+    editingConcernId.value = null;
+    showToast("摘要已更新，来源记为人工");
+  } catch (err) {
+    showToast(errorMessage(err));
+  } finally {
+    summaryBusy.value = false;
+  }
+}
+
+function startEdit(candidate: Candidate) {
+  if (editingCandidateId.value === candidate.candidate_id) {
+    editingCandidateId.value = null;
+    return;
+  }
+  editingCandidateId.value = candidate.candidate_id;
+  attrEdits.value = candidate.attributes.map((attr) => ({
+    key: attr.key,
+    state: attr.state,
+    source: attr.source,
+  }));
+  newAttrKey.value = "";
+  newAttrState.value = "present";
+  attrReason.value = "";
+}
+
+function addEditAttribute() {
+  const key = newAttrKey.value.trim();
+  if (!key) {
+    showToast("请填写属性名");
+    return;
+  }
+  if (key.length > 64) {
+    showToast("属性名最多 64 个字符");
+    return;
+  }
+  if (attrEdits.value.some((item) => item.key === key)) {
+    showToast(`已有属性「${key}」`);
+    return;
+  }
+  attrEdits.value.push({ key, state: newAttrState.value, source: "correction" });
+  newAttrKey.value = "";
+}
+
+async function saveAttributes() {
+  const candidate = pub.value?.candidates.find(
+    (item) => item.candidate_id === editingCandidateId.value,
+  );
+  if (!candidate || !token.value || attrBusy.value) return;
+  const original = new Map(candidate.attributes.map((attr) => [attr.key, attr.state]));
+  const changed = attrEdits.value
+    .filter((attr) => original.get(attr.key) !== attr.state)
+    .map((attr) => ({
+      key: attr.key,
+      state: attr.state,
+      source: "correction" as const,
+    }));
+  if (!changed.length) {
+    showToast("没有需要保存的修改");
+    return;
+  }
+  attrBusy.value = true;
+  try {
+    await api.correctCandidateAttributes(id, candidate.candidate_id, token.value, {
+      attributes: changed,
+      reason: attrReason.value.trim() || null,
+    });
+    showToast("属性事实已更新，相关判定会重新计算");
+    editingCandidateId.value = null;
+    await refresh();
+  } catch (err) {
+    showToast(errorMessage(err));
+  } finally {
+    attrBusy.value = false;
+  }
+}
 
 async function copyInvite() {
   if (!inviteLink.value) return;
@@ -242,6 +394,11 @@ onMounted(refresh);
             <div class="metric-value">{{ pub.conditions.round_limit }} <small>轮</small></div>
             <p class="metric-desc">达到上限仍需全员确认</p>
           </div>
+          <div class="metric">
+            <div class="metric-label"><AppIcon name="users" :size="15" /> 小组人数</div>
+            <div class="metric-value">{{ pub.conditions.member_count }} <small>人</small></div>
+            <p class="metric-desc">创建时声明的规模</p>
+          </div>
         </div>
 
         <div class="notice mt24">
@@ -258,6 +415,73 @@ onMounted(refresh);
             <button type="button" class="btn primary" :disabled="busy" @click="retryCompute">
               <AppIcon name="retry" :size="16" />
               {{ busy ? "重试中…" : "重试计算" }}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel mt16">
+        <div class="between panel-header">
+          <div>
+            <h2>候选属性事实</h2>
+            <p class="hint mt8">
+              三态：已知含 / 已知不含 / 未知。人工修正只改事实，不会改动任何成员的底线，也不会替成员做判断。
+            </p>
+          </div>
+          <span class="badge outline">{{ markedCount }} / {{ pub.candidates.length }} 已标注</span>
+        </div>
+
+        <div class="attr-fact-list">
+          <div v-for="candidate in pub.candidates" :key="candidate.candidate_id" class="attr-fact">
+            <div class="attr-fact-main">
+              <div class="attr-fact-name">
+                <strong>{{ candidate.name }}</strong>
+                <span class="hint"> · {{ candidate.category }} · ¥{{ yuan(candidate.cost_cents) }}</span>
+              </div>
+              <AttributeChips :attributes="candidate.attributes" show-source compact />
+            </div>
+            <button
+              v-if="isInitiator"
+              type="button"
+              class="btn ghost small"
+              @click="startEdit(candidate)"
+            >
+              {{ editingCandidateId === candidate.candidate_id ? "收起" : "修正属性" }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="editingCandidateId" class="attr-edit-panel">
+          <p class="hint">当前编辑的修改会以「修正」来源留痕；未知可以保留，不必强行填成不含。</p>
+          <div class="attr-edit-grid">
+            <div v-for="(attr, index) in attrEdits" :key="attr.key" class="attr-edit-row">
+              <b>{{ attr.key }}</b>
+              <select v-model="attrEdits[index].state" :aria-label="`${attr.key} 的状态`">
+                <option v-for="option in ATTR_OPTIONS" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <div class="attr-edit-row">
+              <input v-model="newAttrKey" maxlength="64" placeholder="新增属性名" />
+              <select v-model="newAttrState" aria-label="新增属性状态">
+                <option v-for="option in ATTR_OPTIONS" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+              <button type="button" class="btn soft small" @click="addEditAttribute">添加</button>
+            </div>
+          </div>
+          <input
+            v-model="attrReason"
+            maxlength="500"
+            placeholder="修正原因（可选，仅用于留痕）"
+            class="attr-reason"
+          />
+          <div class="actions mt8">
+            <button type="button" class="btn ghost" @click="editingCandidateId = null">取消</button>
+            <button type="button" class="btn primary" :disabled="attrBusy" @click="saveAttributes">
+              {{ attrBusy ? "保存中…" : "保存属性事实" }}
             </button>
           </div>
         </div>
@@ -292,6 +516,52 @@ onMounted(refresh);
               <span class="small-label">不附身份</span>
             </div>
             <blockquote>{{ concern.text }}</blockquote>
+            <div class="concern-summary">
+              <div class="between">
+                <span class="small-label">摘要</span>
+                <span
+                  class="badge"
+                  :class="concern.summary_source === 'llm' ? 'green' : 'outline'"
+                >
+                  {{ SUMMARY_SOURCE_LABEL[concern.summary_source] }}
+                </span>
+              </div>
+              <template v-if="editingConcernId === concern.concern_id">
+                <textarea
+                  v-model="summaryDraft"
+                  rows="3"
+                  maxlength="200"
+                  class="summary-input"
+                  placeholder="改写摘要；原文不会被修改"
+                ></textarea>
+                <div class="actions mt8">
+                  <button type="button" class="btn ghost small" @click="editingConcernId = null">
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    class="btn primary small"
+                    :disabled="summaryBusy"
+                    @click="saveSummary(concern)"
+                  >
+                    {{ summaryBusy ? "保存中…" : "保存摘要" }}
+                  </button>
+                </div>
+              </template>
+              <p v-else-if="concern.summary">{{ concern.summary }}</p>
+              <p v-else class="hint">没有摘要，仅展示原文；可手工补充。</p>
+              <p v-if="concern.summary_degraded && concern.summary_source !== 'manual'" class="hint">
+                AI 摘要不可用{{ concernDegradedText(concern) }}，可手工修正。
+              </p>
+            </div>
+            <button
+              v-if="isInitiator && editingConcernId !== concern.concern_id"
+              type="button"
+              class="link-btn"
+              @click="startEditSummary(concern)"
+            >
+              修正摘要
+            </button>
             <p class="hint">原文完整保留，未以摘要替换。</p>
           </article>
         </div>

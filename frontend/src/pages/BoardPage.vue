@@ -3,6 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { showConfirmDialog, showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
+import AttributeChips from "../components/AttributeChips.vue";
+import PendingAttributeChecks from "../components/PendingAttributeChecks.vue";
 import { ApiError, api, errorMessage } from "../api";
 import { statusLabel, statusTone, yuan } from "../format";
 import { TERMINAL_STATUSES, usePolling } from "../polling";
@@ -462,6 +464,12 @@ onMounted(() => {
         </router-link>
       </section>
 
+      <PendingAttributeChecks
+        v-if="invited && me && me.pending_attribute_checks.length"
+        :checks="me.pending_attribute_checks"
+        :candidates="pub.candidates"
+      />
+
       <div class="stage-stats">
         <div class="stage-stat hero-stat">
           <div class="v">
@@ -528,6 +536,7 @@ onMounted(() => {
             </span>
             <div class="n">{{ candidate.name }}</div>
             <div class="cat">{{ candidate.category }}</div>
+            <AttributeChips :attributes="candidate.attributes" compact :max="2" />
             <div class="p">{{ yuan(candidate.cost_cents) }}</div>
           </div>
         </div>
@@ -556,6 +565,7 @@ onMounted(() => {
       <div class="stage-chips">
         <span class="stage-chip">预算 <b>¥{{ yuan(pub.conditions.budget_cents) }}</b></span>
         <span class="stage-chip">恰选 <b>{{ pub.conditions.exact_count }} 项</b></span>
+        <span class="stage-chip">小组 <b>{{ pub.conditions.member_count }} 人</b></span>
         <span class="stage-chip">轮数上限 <b>{{ pub.conditions.round_limit }}</b></span>
         <span v-for="(limit, category) in pub.conditions.category_limits" :key="category" class="stage-chip">
           {{ category }}上限 <b>{{ limit }}</b>

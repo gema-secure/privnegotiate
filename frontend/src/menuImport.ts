@@ -1,7 +1,16 @@
+export type ParsedAttributeState = "present" | "absent" | "unknown";
+
+export interface ParsedAttribute {
+  key: string;
+  state: ParsedAttributeState;
+}
+
 export interface ParsedMenuRow {
   name: string;
   price: string;
   category: string;
+  /** 三态属性；缺省表示没有任何标注，界面上按「未知」呈现。 */
+  attributes?: ParsedAttribute[];
 }
 
 export interface MenuParseResult {
@@ -13,6 +22,67 @@ const NAME_KEYS = ["名称", "菜品", "菜品名称", "菜名", "商品", "name
 const PRICE_KEYS = ["价格", "单价", "金额", "售价", "price", "cost", "amount", "unit_price"];
 const CENT_KEYS = ["cost_cents", "price_cents", "分", "价格分"];
 const CATEGORY_KEYS = ["分类", "类别", "类型", "分组", "category", "type", "group"];
+const ATTRIBUTE_KEYS = ["属性", "标签", "口味", "attributes", "attribute", "tags"];
+const PRESENT_ALIASES = ["含", "有", "是", "包含", "present", "yes", "true", "1"];
+const ABSENT_ALIASES = ["不含", "没有", "无", "否", "不包含", "absent", "no", "false", "0"];
+const UNKNOWN_ALIASES = ["未知", "不确定", "待确认", "unknown", "?"];
+
+/** 把「含 / 不含 / 未知」及其英文别名归一化为三态；无法识别返回 null。 */
+export function normalizeAttributeState(raw: string): ParsedAttributeState | null {
+  const value = raw.trim().toLowerCase();
+  if (!value) return null;
+  if (PRESENT_ALIASES.includes(value)) return "present";
+  if (ABSENT_ALIASES.includes(value)) return "absent";
+  if (UNKNOWN_ALIASES.includes(value)) return "unknown";
+  return null;
+}
+
+/** 单元格格式：`辣=含;素食=未知`，也接受 `辣:含` 与中英文分隔符。 */
+function parseAttributeCell(cell: string): ParsedAttribute[] {
+  const items: ParsedAttribute[] = [];
+  for (const part of cell.split(/[;；|｜]/)) {
+    const text = part.trim();
+    if (!text) continue;
+    const match = text.match(/^(.{1,64}?)\s*[=:：]\s*(.+)$/);
+    if (!match) continue;
+    const key = match[1].trim();
+    const state = normalizeAttributeState(match[2]);
+    if (!key || !state || items.some((item) => item.key === key)) continue;
+    items.push({ key, state });
+  }
+  return items;
+}
+
+function parseJsonAttributes(value: unknown): ParsedAttribute[] {
+  const items: ParsedAttribute[] = [];
+  const push = (rawKey: unknown, rawState: unknown) => {
+    const key = String(rawKey ?? "").trim();
+    if (!key || key.length > 64 || items.some((item) => item.key === key)) return;
+    const state =
+      rawState === true
+        ? "present"
+        : rawState === false
+          ? "absent"
+          : normalizeAttributeState(String(rawState ?? ""));
+    if (!state) return;
+    items.push({ key, state });
+  };
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (!entry || typeof entry !== "object") continue;
+      const record = entry as Record<string, unknown>;
+      push(
+        record.key ?? record.name ?? record["属性"],
+        record.state ?? record.value ?? record["状态"],
+      );
+    }
+  } else if (value && typeof value === "object") {
+    for (const [key, state] of Object.entries(value as Record<string, unknown>)) {
+      push(key, state);
+    }
+  }
+  return items;
+}
 
 function normalize(value: string): string {
   return value.replace(/^\uFEFF/, "").trim().toLowerCase();
@@ -100,6 +170,7 @@ export function parseMenuText(text: string): MenuParseResult {
   const centsIndex = hasHeader ? findColumn(headers, CENT_KEYS) : -1;
   const priceIndex = hasHeader ? findColumn(headers, PRICE_KEYS) : 1;
   const categoryIndex = hasHeader ? findColumn(headers, CATEGORY_KEYS) : 2;
+  const attributeIndex = hasHeader ? findColumn(headers, ATTRIBUTE_KEYS) : -1;
 
   if (hasHeader && nameIndex < 0) {
     return { rows: [], errors: ["表头缺少名称列（名称 / 菜品 / name）。"] };
@@ -132,7 +203,9 @@ export function parseMenuText(text: string): MenuParseResult {
       return;
     }
     const category = categoryIndex >= 0 ? (data[categoryIndex] ?? "").trim() : "";
-    rows.push({ name, price, category: category || "未分类" });
+    const attributes =
+      attributeIndex >= 0 ? parseAttributeCell(data[attributeIndex] ?? "") : [];
+    rows.push({ name, price, category: category || "未分类", attributes });
   });
 
   return { rows, errors };
@@ -176,13 +249,18 @@ export function parseMenuJson(text: string): MenuParseResult {
       return;
     }
     const category = String(record.category ?? record.type ?? record["分类"] ?? record["类别"] ?? "").trim();
-    rows.push({ name, price, category: category || "未分类" });
+    rows.push({
+      name,
+      price,
+      category: category || "未分类",
+      attributes: parseJsonAttributes(record.attributes ?? record["属性"]),
+    });
   });
 
   return { rows, errors };
 }
 
-export const CSV_TEMPLATE = "名称,价格,分类\n";
+export const CSV_TEMPLATE = "名称,价格,分类,属性\n";
 
 export const MIN_CANDIDATES = 13;
 export const MAX_CANDIDATES = 30;

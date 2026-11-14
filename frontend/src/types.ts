@@ -21,18 +21,37 @@ export type AnswerMode = "explicit" | "skip";
 export type MemberRole = "initiator" | "member";
 export type ConstraintKind = "exclude_item" | "opt_out" | "require_count";
 
+/** 菜品属性的三态事实：已知含 / 已知不含 / 未知。未标注一律按 unknown 处理。 */
+export type AttributeState = "present" | "absent" | "unknown";
+export type AttributeSource = "import" | "manual" | "correction";
+
+export interface CandidateAttribute {
+  key: string;
+  state: AttributeState;
+  source: AttributeSource;
+}
+
+export interface CandidateAttributeInput {
+  key: string;
+  state: AttributeState;
+  source?: AttributeSource;
+  source_detail?: string | null;
+}
+
 export interface Candidate {
   candidate_id: string;
   name: string;
   cost_cents: number;
   category: string;
   confirmed_attributes: Record<string, string | number | boolean>;
+  attributes: CandidateAttribute[];
 }
 
 export interface PublicCondition {
   budget_cents: number;
   exact_count: number;
   round_limit: number;
+  member_count: number;
   category_limits: Record<string, number>;
   condition_version: number;
 }
@@ -79,6 +98,11 @@ export interface MyQuestionBatch {
   items: Candidate[];
   deadline: string;
   allow_skip: boolean;
+  /** 服务端可能下发 AI 生成的措辞；字段缺席时按模板措辞理解。 */
+  prompt_text?: string;
+  wording_source?: "llm" | "template";
+  wording_degraded?: boolean;
+  wording_degraded_reason?: string | null;
 }
 
 export interface MyConstraint {
@@ -113,8 +137,39 @@ export interface MyConcern {
   result_version: number;
   text: string;
   summary: string | null;
+  summary_source: "llm" | "manual" | "none";
+  summary_degraded: boolean;
+  summary_degraded_reason: string | null;
   status: string;
   created_at: string;
+}
+
+/** 自然语言底线解析结果：只出提议，必须成员逐条确认后才写入约束。 */
+export interface BottomlineProposal {
+  kind: ConstraintKind;
+  candidate_ids: string[];
+  category: string | null;
+  min_count: number | null;
+  display_text: string;
+}
+
+export interface BottomlineParse {
+  needs_form: boolean;
+  reason: string | null;
+  degraded: boolean;
+  requires_confirmation: boolean;
+  model: string | null;
+  proposals: BottomlineProposal[];
+}
+
+/** 本人替代要求中尚未能确认的候选属性队列；只含本人数据。 */
+export interface MyPendingAttributeCheck {
+  constraint_id: string;
+  category: string | null;
+  attribute_keys: string[];
+  required_count: number;
+  confirmed_count: number;
+  unconfirmed_candidate_ids: string[];
 }
 
 export interface MyState {
@@ -137,6 +192,7 @@ export interface MyState {
   };
   confirmation: MyConfirmation | null;
   concerns: MyConcern[];
+  pending_attribute_checks: MyPendingAttributeCheck[];
 }
 
 export interface MyHistoryEntry {
@@ -174,6 +230,9 @@ export interface OrganizerConcern {
   result_version: number;
   text: string;
   summary: string | null;
+  summary_source: "llm" | "manual" | "none";
+  summary_degraded: boolean;
+  summary_degraded_reason: string | null;
   status: string;
   created_at: string;
 }
@@ -190,6 +249,7 @@ export interface CandidateDraft {
   cost_cents: number;
   category: string;
   confirmed_attributes: Record<string, string | number | boolean>;
+  attributes?: CandidateAttributeInput[];
 }
 
 export interface ConstraintsPayload {

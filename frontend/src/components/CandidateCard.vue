@@ -4,6 +4,7 @@ import type { Candidate } from "../types";
 import { yuan } from "../format";
 import { iconForCategory, paletteFor } from "../scenario";
 import AppIcon from "./AppIcon.vue";
+import AttributeChips from "./AttributeChips.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -61,6 +62,7 @@ const optionIcon = computed(() =>
         <span class="dish-category">{{ candidate.category }}</span>
         <span class="price">{{ yuan(candidate.cost_cents) }}</span>
       </div>
+      <AttributeChips :attributes="candidate.attributes" compact :max="3" />
       <template v-if="selectable">
         <label class="accept-line" @click.stop>
           <input
