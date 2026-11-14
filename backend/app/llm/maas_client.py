@@ -4,6 +4,8 @@
 - llm_text_enabled 且配置了 api_key 才启用；未启用时调用方必须走
   固定模板 / 结构化表单降级，核心协商不得依赖本模块。
 - 日志只记录状态与用量，不留私人原文。
+- 现实状态：项目尚未取得华为云 MaaS 文本调用凭证，默认关闭。本文档只描述
+  可配置的调用约定，不代表已在真实 MaaS 端点验证通过。
 """
 
 from __future__ import annotations
@@ -157,3 +159,14 @@ class TextLlmClient:
                     self._config.cooldown_seconds,
                     self._consecutive_failures,
                 )
+
+
+_CLIENT: TextLlmClient | None = None
+
+
+def get_text_llm_client() -> TextLlmClient:
+    """三入口共享同一个客户端，共享熔断状态；测试可用依赖覆盖替换。"""
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = TextLlmClient()
+    return _CLIENT

@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Literal
 
 from app.llm.maas_client import LlmUnavailable, TextLlmClient
 
@@ -24,16 +26,32 @@ _SYSTEM_PROMPT = (
 
 def assist_summary(text: str, client: TextLlmClient) -> str | None:
     """返回辅助摘要；LLM 未启用、不可达或输出异常时返回 None（保持无摘要）。"""
-    if not client.enabled or not text.strip():
-        return None
+    return summarize_concern(text, client).summary
+
+
+@dataclass(frozen=True, slots=True)
+class ConcernSummary:
+    summary: str | None
+    source: Literal["llm", "none"]
+    degraded_reason: str | None = None
+
+
+def summarize_concern(
+    text: str, client: TextLlmClient | None
+) -> ConcernSummary:
+    """整理顾虑并显式标注来源；原文始终保留，失败不阻塞提交。"""
+    if not text.strip():
+        return ConcernSummary(None, "none", "empty_input")
+    if client is None or not client.enabled:
+        return ConcernSummary(None, "none", "llm_disabled")
     try:
         summary = client.chat(
             _SYSTEM_PROMPT, text[:_MAX_INPUT_CHARS], max_tokens=200
         )
     except LlmUnavailable:
-        return None
+        return ConcernSummary(None, "none", "llm_unavailable")
     summary = " ".join(summary.split())
     if not summary or len(summary) > _MAX_SUMMARY_CHARS:
         logger.info("concern summary rejected by length guard")
-        return None
-    return summary
+        return ConcernSummary(None, "none", "llm_bad_output")
+    return ConcernSummary(summary, "llm")

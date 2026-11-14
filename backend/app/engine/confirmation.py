@@ -103,7 +103,12 @@ def submit_confirmation(
 
 
 def submit_concern(
-    db: Session, negotiation_id: int, member: Member, command
+    db: Session,
+    negotiation_id: int,
+    member: Member,
+    command,
+    summary: str | None = None,
+    summary_source: str | None = None,
 ) -> Concern:
     negotiation = db.get(Negotiation, negotiation_id, with_for_update=True)
     if negotiation is None:
@@ -118,7 +123,8 @@ def submit_concern(
         member_id=member.id,
         result_version=command.result_version,
         original_text=command.text,
-        summary=None,
+        summary=summary,
+        summary_source=summary_source,
         share_notice_version="v1",
         status="open",
     )
@@ -129,6 +135,31 @@ def submit_concern(
         negotiation,
         "CONCERN_SUBMITTED",
         {"concern_id": concern.id, "result_version": command.result_version},
+        actor_member_id=member.id,
+    )
+    db.commit()
+    return concern
+
+
+def correct_concern_summary(
+    db: Session, negotiation_id: int, concern_id: int, member: Member, summary: str
+) -> Concern:
+    """发起者人工修正摘要；原文保持不变，修正后仍可继续或停止。"""
+    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True)
+    if negotiation is None:
+        raise not_found("NEGOTIATION_NOT_FOUND", "协商不存在")
+    if member.role != "initiator":
+        raise forbidden("INITIATOR_ONLY", "只有发起者可以修正顾虑摘要")
+    concern = db.get(Concern, concern_id)
+    if concern is None or concern.negotiation_id != negotiation.id:
+        raise not_found("CONCERN_NOT_FOUND", "顾虑不存在")
+    concern.summary = summary
+    concern.summary_source = "manual"
+    append_event(
+        db,
+        negotiation,
+        "CONCERN_SUMMARY_CORRECTED",
+        {"concern_id": concern.id},
         actor_member_id=member.id,
     )
     db.commit()

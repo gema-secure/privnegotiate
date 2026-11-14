@@ -79,7 +79,10 @@ def project_negotiation(
         )
     ).all()
     for member in members:
-        member_json = build_my_view(db, negotiation, member).model_dump_json()
+        # 后台投影不调用 LLM：固定模板即确定性结果，不标记为降级故障。
+        member_json = build_my_view(
+            db, negotiation, member, wording_mode="template"
+        ).model_dump_json()
         if write_snapshot(
             client, member_key(negotiation_id, member.id), version, member_json, ttl
         ):

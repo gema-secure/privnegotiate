@@ -350,6 +350,7 @@ class Concern(Base):
     result_version: Mapped[int] = mapped_column(Integer, nullable=False)
     original_text: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     share_notice_version: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
     created_at: Mapped[datetime] = mapped_column(
