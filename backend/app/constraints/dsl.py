@@ -10,6 +10,15 @@ from typing import Any, Iterable, Mapping
 AttributeValue = str | int | bool
 
 
+class AttributeState(str, Enum):
+    """菜品属性的确定状态：已知含 / 已知不含 / 未知。"""
+
+    PRESENT = "present"
+    ABSENT = "absent"
+    UNKNOWN = "unknown"
+
+
+
 class DslError(ValueError):
     """约束不符合白名单或参数语义。"""
 
@@ -86,11 +95,15 @@ class Candidate:
     cost_cents: int
     category: str = "unknown"
     attributes: Mapping[str, AttributeValue] = field(default_factory=dict)
+    attribute_states: Mapping[str, AttributeState] = field(default_factory=dict)
     active: bool = True
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self, "attributes", MappingProxyType(dict(self.attributes))
+        )
+        object.__setattr__(
+            self, "attribute_states", MappingProxyType(dict(self.attribute_states))
         )
 
 

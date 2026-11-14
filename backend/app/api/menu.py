@@ -17,10 +17,17 @@ class MenuImageCommand(BaseModel):
     mime_type: Literal["image/jpeg", "image/png", "image/webp"] = "image/jpeg"
 
 
+class MenuAttributeView(BaseModel):
+    key: str
+    state: Literal["present", "absent", "unknown"]
+    source: Literal["import", "manual"] = "import"
+
+
 class MenuItemView(BaseModel):
     name: str
     price: str
     category: str
+    attributes: list[MenuAttributeView] = Field(default_factory=list)
 
 
 class MenuImageResult(BaseModel):

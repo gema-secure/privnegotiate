@@ -134,8 +134,11 @@ def test_compile_marks_opt_out_and_keeps_requirement_unsatisfied() -> None:
     assert model.e[0][2] == 0
     assert model.e[1][2] == 1
     vegetarian_row = next(row for row in model.rows if row.label == "require:r1")
-    assert vegetarian_row.coefficients == (0, 1, 0, 0, 1)
+    # c4 没有任何素食标注：未标注不等于不含，按未知计入待确认，不静默排除。
+    assert vegetarian_row.coefficients == (0, 1, 0, 1, 1)
+    assert vegetarian_row.uncertain_indices == (3,)
     assert vegetarian_row.lower == 1
+    assert [item.constraint_id for item in model.pending_checks] == []
 
 
 def test_compile_attributes_must_match_type_and_value() -> None:

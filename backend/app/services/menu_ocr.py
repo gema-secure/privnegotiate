@@ -25,6 +25,9 @@ SYSTEM_PROMPT = (
     "格式：{\"items\":[{\"name\":\"菜名\",\"price\":38.5,\"category\":\"荤菜\"}]}。"
     "要求：name 使用图中原文，不要翻译、不要加序号；price 为该项的单价数字，单位元，保留两位小数，"
     "看不清或没有标价时省略该字段；category 按菜单自身的分组填写，没有分组时用「未分类」。"
+    "如果菜单明确标注了过敏原、素食、辣度等属性，请在菜品对象里加 attributes，"
+    "格式为 {\"花生\":\"present\",\"香菜\":\"absent\"}；只记录图中明确写出的信息，"
+    "没写的不要猜测，也不要补 unknown。"
     "忽略店铺名、地址、评分、优惠规则、配送费说明等非菜品文字。"
     "如果图中是同一种菜品的多个规格或套餐，按图中实际可点的条目逐条输出。"
 )
@@ -156,6 +159,51 @@ def _call_maas(image_data: bytes, mime_type: str) -> tuple[str, str]:
     return str(content), settings.maas_vision_model
 
 
+def _normalize_attributes(raw: Any) -> tuple[list[dict[str, str]], bool]:
+    """把识别结果中的属性标注归一为三态；无法识别的条目返回已丢弃标记。"""
+    entries: list[tuple[Any, Any]] = []
+    if isinstance(raw, dict):
+        entries = list(raw.items())
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                entries.append(
+                    (item.get("key") or item.get("name"), item.get("state") or item.get("value"))
+                )
+            elif isinstance(item, str) and item.strip():
+                entries.append((item, "present"))
+    states = {
+        "present": "present",
+        "absent": "absent",
+        "unknown": "unknown",
+        "含": "present",
+        "有": "present",
+        "不含": "absent",
+        "无": "absent",
+        "未知": "unknown",
+        True: "present",
+        False: "absent",
+        None: "unknown",
+    }
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    dropped = False
+    for key, value in entries:
+        name = str(key or "").strip()
+        try:
+            state = states.get(value)
+        except TypeError:
+            state = None
+        if not name or state is None or name in seen:
+            dropped = dropped or bool(name)
+            continue
+        seen.add(name)
+        result.append(
+            {"key": name[:64], "state": state, "source": "import"}
+        )
+    return result, dropped
+
+
 def parse_menu_image(image_base64: str, mime_type: str) -> dict[str, Any]:
     image_data = _decode_image(image_base64, mime_type)
     content, model = _call_maas(image_data, mime_type)
@@ -190,8 +238,16 @@ def parse_menu_image(image_base64: str, mime_type: str) -> dict[str, Any]:
             warnings.append(f"「{name}」未识别到有效价格，已按 0 处理，请手动补充。")
             amount = 0
         category = str(raw.get("category") or raw.get("分类") or "").strip()
+        attributes, dropped = _normalize_attributes(raw.get("attributes"))
+        if dropped:
+            warnings.append(f"「{name}」有无法识别的属性标注，已忽略，请手动补充。")
         items.append(
-            {"name": name[:120], "price": f"{amount:.2f}", "category": category[:64] or "未分类"}
+            {
+                "name": name[:120],
+                "price": f"{amount:.2f}",
+                "category": category[:64] or "未分类",
+                "attributes": attributes,
+            }
         )
 
     if not items:

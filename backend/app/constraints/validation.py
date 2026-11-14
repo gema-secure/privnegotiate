@@ -76,6 +76,20 @@ def precheck(model: ConstraintModel) -> PrecheckReport:
                     f"{row.label} 要求至少 {row.lower}，但最多只有 {available}",
                 )
             )
+            continue
+        uncertain = set(row.uncertain_indices)
+        confirmed = sum(
+            row.coefficients[index] for index in eligible if index not in uncertain
+        )
+        if row.lower is not None and row.lower > confirmed:
+            issues.append(
+                PrecheckIssue(
+                    "ATTRIBUTE_UNKNOWN_PENDING",
+                    f"{row.label} 要求至少 {row.lower}，已确认 {confirmed}，"
+                    f"其余 {available - confirmed} 项属性未知，进入待确认",
+                    definite=False,
+                )
+            )
 
     return PrecheckReport(
         issues=tuple(issues),

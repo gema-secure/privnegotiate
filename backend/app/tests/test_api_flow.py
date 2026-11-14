@@ -396,6 +396,9 @@ def test_concern_flow_and_initiator_only(api):
         "result_version",
         "text",
         "summary",
+        "summary_source",
+        "summary_degraded",
+        "summary_degraded_reason",
         "status",
         "created_at",
     }

@@ -13,8 +13,13 @@ from app.core.auth import generate_member_token, hash_token
 from app.core.config import settings
 from app.engine.constraints_service import write_public_conditions
 from app.engine.events import append_event
-from app.engine.state import ANSWER_OPEN_STATUSES, conflict, forbidden, not_found
-from app.models.business import Candidate, Member, Negotiation
+from app.engine.state import ANSWER_OPEN_STATUSES, conflict, forbidden, invalid, not_found
+from app.models.business import (
+    Candidate,
+    CandidateAttribute,
+    Member,
+    Negotiation,
+)
 from app.schemas.commands import NegotiationStatus
 
 DEFAULT_CONFIG: dict = {
@@ -57,6 +62,14 @@ def invite_token(negotiation_id: int) -> str:
 
 
 def create_negotiation(db: Session, command) -> tuple[Negotiation, Member, str]:
+    member_count = int(getattr(command, "member_count", settings.min_members))
+    if member_count < settings.min_members:
+        raise invalid("MEMBER_COUNT_TOO_SMALL", "小组至少需要 3 人")
+    if member_count > settings.max_members:
+        raise invalid(
+            "MEMBER_COUNT_TOO_LARGE",
+            f"小组成员不能超过 {settings.max_members} 人",
+        )
     negotiation = Negotiation(
         title=command.title,
         status=NegotiationStatus.COLLECTING_BOTTOMLINE.value,
@@ -67,6 +80,7 @@ def create_negotiation(db: Session, command) -> tuple[Negotiation, Member, str]:
         algorithm_profile=command.algorithm_profile.value,
         config_json={
             **DEFAULT_CONFIG,
+            "member_count": member_count,
             "category_limits": dict(command.category_limits),
             "solver": {
                 **DEFAULT_CONFIG["solver"],
@@ -78,18 +92,30 @@ def create_negotiation(db: Session, command) -> tuple[Negotiation, Member, str]:
     db.flush()
 
     for item in command.candidates:
-        db.add(
-            Candidate(
-                negotiation_id=negotiation.id,
-                public_id=item.candidate_id,
-                name=item.name,
-                cost_cents=item.cost_cents,
-                category=item.category,
-                confirmed_attributes=dict(item.confirmed_attributes),
-                metadata_version=1,
-                active=True,
-            )
+        candidate = Candidate(
+            negotiation_id=negotiation.id,
+            public_id=item.candidate_id,
+            name=item.name,
+            cost_cents=item.cost_cents,
+            category=item.category,
+            confirmed_attributes=dict(item.confirmed_attributes),
+            metadata_version=1,
+            active=True,
         )
+        db.add(candidate)
+        db.flush()
+        for attribute in getattr(item, "attributes", []):
+            db.add(
+                CandidateAttribute(
+                    negotiation_id=negotiation.id,
+                    candidate_id=candidate.id,
+                    attribute_key=attribute.key,
+                    state=attribute.state.value,
+                    source=attribute.source.value,
+                    source_detail=attribute.source_detail,
+                    updated_by_member_id=None,
+                )
+            )
 
     token = generate_member_token()
     owner = Member(
@@ -123,6 +149,7 @@ def create_negotiation(db: Session, command) -> tuple[Negotiation, Member, str]:
             "budget_cents": command.budget_cents,
             "exact_count": command.exact_count,
             "round_limit": command.round_limit,
+            "member_count": member_count,
         },
         actor_member_id=owner.id,
     )

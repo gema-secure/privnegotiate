@@ -95,6 +95,60 @@ class Candidate(Base):
     )
 
 
+class CandidateAttribute(Base):
+    """菜品属性的三态事实：present/absent/unknown，未知不得当作 absent。"""
+
+    __tablename__ = "candidate_attribute"
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "attribute_key", name="uq_attribute_candidate_key"),
+        Index("ix_attribute_negotiation_key", "negotiation_id", "attribute_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    negotiation_id: Mapped[int] = mapped_column(
+        ForeignKey("negotiation.id"), nullable=False
+    )
+    candidate_id: Mapped[int] = mapped_column(
+        ForeignKey("candidate.id"), nullable=False
+    )
+    attribute_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    source: Mapped[str] = mapped_column(String(24), nullable=False, default="manual")
+    source_detail: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    updated_by_member_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class CandidateAttributeRevision(Base):
+    """属性修正留痕：每次人工修正写一条，保留修正前状态与原因。"""
+
+    __tablename__ = "candidate_attribute_revision"
+    __table_args__ = (
+        Index("ix_attribute_revision_candidate", "candidate_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    negotiation_id: Mapped[int] = mapped_column(
+        ForeignKey("negotiation.id"), nullable=False
+    )
+    attribute_id: Mapped[int] = mapped_column(
+        ForeignKey("candidate_attribute.id"), nullable=False
+    )
+    candidate_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    attribute_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    new_state: Mapped[str] = mapped_column(String(16), nullable=False)
+    previous_source: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    new_source: Mapped[str] = mapped_column(String(24), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_by_member_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
 class Member(Base):
     __tablename__ = "member"
     __table_args__ = (

@@ -20,6 +20,8 @@ class Base(DeclarativeBase):
 
 from app.models.business import (  # noqa: E402
     Candidate,
+    CandidateAttribute,
+    CandidateAttributeRevision,
     Concern,
     ConfirmedConstraint,
     InitiatorDecision,
@@ -36,6 +38,8 @@ from app.models.outbox import Outbox  # noqa: E402
 __all__ = [
     "Base",
     "Candidate",
+    "CandidateAttribute",
+    "CandidateAttributeRevision",
     "Concern",
     "ConfirmedConstraint",
     "InitiatorDecision",

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.constraints.dsl import (
+    AttributeState,
     Candidate as DslCandidate,
     ConfirmedConstraint,
     ConstraintKind,
@@ -17,6 +18,7 @@ from app.constraints.dsl import (
 )
 from app.models.business import (
     Candidate,
+    CandidateAttribute,
     ConfirmedConstraint as ConstraintRow,
     Member,
     QuestionAnswer,
@@ -24,17 +26,41 @@ from app.models.business import (
 from app.preference.acceptance import AnswerObservation
 
 
-def candidate_dtos(rows: Iterable[Candidate]) -> tuple[DslCandidate, ...]:
+def candidate_dtos(
+    rows: Iterable[Candidate],
+    attribute_states: dict[int, dict[str, AttributeState]] | None = None,
+) -> tuple[DslCandidate, ...]:
+    states = attribute_states or {}
     return tuple(
         DslCandidate(
             candidate_id=row.public_id,
             cost_cents=row.cost_cents,
             category=row.category or "unknown",
             attributes=dict(row.confirmed_attributes or {}),
+            attribute_states=states.get(row.id, {}),
             active=row.active,
         )
         for row in rows
     )
+
+
+def attribute_state_map(
+    db: Session, negotiation_id: int
+) -> dict[int, dict[str, AttributeState]]:
+    """读取候选菜品的三态属性；非法旧值按“未知”处理，绝不猜测为不含。"""
+    result: dict[int, dict[str, AttributeState]] = defaultdict(dict)
+    records = db.scalars(
+        select(CandidateAttribute).where(
+            CandidateAttribute.negotiation_id == negotiation_id
+        )
+    ).all()
+    for record in records:
+        try:
+            state = AttributeState(record.state)
+        except ValueError:
+            state = AttributeState.UNKNOWN
+        result[record.candidate_id][record.attribute_key] = state
+    return dict(result)
 
 
 def member_dtos(rows: Iterable[Member]) -> tuple[DslMember, ...]:

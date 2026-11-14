@@ -5,9 +5,18 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.engine.attributes import candidate_attribute_rows
+from app.engine.loading import (
+    attribute_state_map,
+    candidate_dtos,
+    constraint_dtos,
+)
 from app.engine.state import not_found
+from app.constraints.compiler import pending_for_requirement
+from app.llm.wording import render_question_with_llm
 from app.models.business import (
     Candidate,
+    CandidateAttribute,
     Concern,
     ConfirmedConstraint,
     Member,
@@ -26,10 +35,12 @@ from app.schemas.private_views import (
     MyConfirmationView,
     MyConstraintView,
     MyHistoryEntryView,
+    MyPendingAttributeCheckView,
     MyQuestionBatchView,
     MyStateView,
 )
 from app.schemas.public_views import (
+    PublicAttributeView,
     PublicCandidateView,
     PublicConditionView,
     PublicNegotiationView,
@@ -45,18 +56,27 @@ def _conditions(negotiation: Negotiation) -> PublicConditionView:
         budget_cents=negotiation.budget_cents,
         exact_count=negotiation.exact_count,
         round_limit=negotiation.round_limit,
+        member_count=int((negotiation.config_json or {}).get("member_count", 3)),
         category_limits=dict(limits),
         condition_version=negotiation.constraint_version,
     )
 
 
-def _candidate_view(row: Candidate) -> PublicCandidateView:
+def _candidate_view(
+    row: Candidate, attributes: list[CandidateAttribute] | None = None
+) -> PublicCandidateView:
     return PublicCandidateView(
         candidate_id=row.public_id,
         name=row.name,
         cost_cents=row.cost_cents,
         category=row.category,
         confirmed_attributes=dict(row.confirmed_attributes or {}),
+        attributes=[
+            PublicAttributeView(
+                key=item.attribute_key, state=item.state, source=item.source
+            )
+            for item in (attributes or [])
+        ],
     )
 
 
@@ -88,6 +108,7 @@ def build_public_view(db: Session, negotiation: Negotiation) -> PublicNegotiatio
         .where(Candidate.negotiation_id == negotiation.id, Candidate.active.is_(True))
         .order_by(Candidate.public_id)
     ).all()
+    attribute_rows = candidate_attribute_rows(db, negotiation.id)
     result = _active_result(db, negotiation)
     evidence = _has_evidence(db, negotiation.id)
 
@@ -131,7 +152,9 @@ def build_public_view(db: Session, negotiation: Negotiation) -> PublicNegotiatio
         status=negotiation.status,
         round_no=negotiation.round_no,
         conditions=_conditions(negotiation),
-        candidates=[_candidate_view(row) for row in candidates],
+        candidates=[
+            _candidate_view(row, attribute_rows.get(row.id)) for row in candidates
+        ],
         recommendation=recommendation,
         recommendation_pending_reason=reason,
         pending_action=pending,
@@ -196,7 +219,14 @@ def _acceptance_summary(
     )
 
 
-def build_my_view(db: Session, negotiation: Negotiation, member: Member) -> MyStateView:
+def build_my_view(
+    db: Session,
+    negotiation: Negotiation,
+    member: Member,
+    *,
+    llm_client=None,
+    wording_mode: str = "auto",
+) -> MyStateView:
     batch = _my_batch(db, negotiation, member)
     question_batch = None
     if batch is not None:
@@ -206,16 +236,35 @@ def build_my_view(db: Session, negotiation: Negotiation, member: Member) -> MySt
                 select(Candidate).where(Candidate.negotiation_id == negotiation.id)
             ).all()
         }
+        item_rows = [
+            candidates[item]
+            for item in (batch.displayed_ids or [])
+            if item in candidates
+        ]
+        wording = None
+        if item_rows:
+            wording = render_question_with_llm(
+                [row.name for row in item_rows],
+                llm_client if wording_mode == "auto" else None,
+            )
         question_batch = MyQuestionBatchView(
             question_batch_id=batch.batch_public_id,
             round_no=batch.round_no,
-            items=[
-                _candidate_view(candidates[item])
-                for item in (batch.displayed_ids or [])
-                if item in candidates
-            ],
+            items=[_candidate_view(row) for row in item_rows],
             deadline=batch.deadline,
             allow_skip=True,
+            prompt_text=wording.text if wording else "",
+            wording_source=wording.source if wording else "template",
+            wording_degraded=(
+                wording.degraded
+                if wording is not None and wording_mode == "auto"
+                else False
+            ),
+            wording_degraded_reason=(
+                wording.degraded_reason
+                if wording is not None and wording_mode == "auto"
+                else None
+            ),
         )
 
     constraints = db.scalars(
@@ -266,6 +315,52 @@ def build_my_view(db: Session, negotiation: Negotiation, member: Member) -> MySt
         .order_by(Concern.id.desc())
     ).all()
 
+    pending_checks: list[MyPendingAttributeCheckView] = []
+    require_rows = [row for row in constraints if row.kind == "require_count"]
+    if require_rows:
+        candidate_rows = db.scalars(
+            select(Candidate).where(
+                Candidate.negotiation_id == negotiation.id,
+                Candidate.active.is_(True),
+            )
+        ).all()
+        dtos = candidate_dtos(
+            candidate_rows, attribute_state_map(db, negotiation.id)
+        )
+        opt_out_ids: set[str] = set()
+        excluded_ids: set[str] = set()
+        for row in constraints:
+            if row.kind == "opt_out":
+                opt_out_ids.update((row.payload or {}).get("candidate_ids") or ())
+            elif row.kind == "exclude_item":
+                excluded_ids.update((row.payload or {}).get("candidate_ids") or ())
+        eligible_ids = [
+            item.candidate_id
+            for item in dtos
+            if item.candidate_id not in opt_out_ids
+        ]
+        for constraint in constraint_dtos(require_rows):
+            check = pending_for_requirement(
+                constraint,
+                dtos,
+                eligible_ids=eligible_ids,
+                excluded_ids=excluded_ids,
+            )
+            if check is None:
+                continue
+            pending_checks.append(
+                MyPendingAttributeCheckView(
+                    constraint_id=check.constraint_id,
+                    category=check.category,
+                    attribute_keys=list(check.attribute_keys),
+                    required_count=check.required_count,
+                    confirmed_count=check.confirmed_count,
+                    unconfirmed_candidate_ids=list(
+                        check.unconfirmed_candidate_ids
+                    ),
+                )
+            )
+
     return MyStateView(
         negotiation_id=negotiation.id,
         member=MemberIdentityView(
@@ -283,6 +378,7 @@ def build_my_view(db: Session, negotiation: Negotiation, member: Member) -> MySt
         preference_version=member.preference_version,
         acceptance_summary=_acceptance_summary(db, negotiation, member),
         confirmation=confirmation,
+        pending_attribute_checks=pending_checks,
         concerns=[
             MyConcernView(
                 concern_id=row.id,

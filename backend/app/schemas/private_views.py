@@ -56,6 +56,9 @@ class OrganizerConcernView(StrictModel):
     result_version: int
     text: str
     summary: str | None = None
+    summary_source: Literal["llm", "manual", "none"] = "none"
+    summary_degraded: bool = False
+    summary_degraded_reason: str | None = None
     status: str
     created_at: datetime
 
@@ -78,6 +81,10 @@ class MyQuestionBatchView(StrictModel):
     items: list[PublicCandidateView]
     deadline: datetime
     allow_skip: bool = True
+    prompt_text: str = ""
+    wording_source: Literal["llm", "template"] = "template"
+    wording_degraded: bool = False
+    wording_degraded_reason: str | None = None
 
 
 class MyConstraintView(StrictModel):
@@ -131,8 +138,41 @@ class MyConcernView(StrictModel):
     result_version: int
     text: str
     summary: str | None = None
+    summary_source: Literal["llm", "manual", "none"] = "none"
+    summary_degraded: bool = False
+    summary_degraded_reason: str | None = None
     status: str
     created_at: datetime
+
+
+class BottomlineProposalView(StrictModel):
+    kind: Literal["exclude_item", "opt_out", "require_count"]
+    candidate_ids: list[str] = Field(default_factory=list)
+    category: str | None = None
+    min_count: int | None = None
+    display_text: str
+
+
+class BottomlineParseView(StrictModel):
+    """解析提议，必须经成员确认后才可通过 /me/constraints 写入约束。"""
+
+    needs_form: bool
+    reason: str | None = None
+    proposals: list[BottomlineProposalView] = Field(default_factory=list)
+    model: str | None = None
+    requires_confirmation: Literal[True] = True
+    degraded: bool = False
+
+
+class MyPendingAttributeCheckView(StrictModel):
+    """只返回本人的待确认项，不暴露其他成员的约束或属性需求。"""
+
+    constraint_id: str
+    category: str | None = None
+    attribute_keys: list[str] = Field(default_factory=list)
+    required_count: int
+    confirmed_count: int
+    unconfirmed_candidate_ids: list[str] = Field(default_factory=list)
 
 
 class MyStateView(StrictModel):
@@ -149,3 +189,6 @@ class MyStateView(StrictModel):
     acceptance_summary: MyAcceptanceSummaryView
     confirmation: MyConfirmationView | None = None
     concerns: list[MyConcernView] = Field(default_factory=list)
+    pending_attribute_checks: list[MyPendingAttributeCheckView] = Field(
+        default_factory=list
+    )

@@ -33,7 +33,8 @@ class Settings(BaseSettings):
     invite_token_secret: str = "dev-only-invite-secret"
     answer_deadline_seconds: int = 600
     solver_time_limit_seconds: float = 10.0
-    max_members: int = 6
+    max_members: int = 15
+    min_members: int = 3
 
     # 菜单截图识别（华为云 MaaS，OpenAI 兼容接口）
     maas_base_url: str = "https://api.modelarts-maas.com/v1"

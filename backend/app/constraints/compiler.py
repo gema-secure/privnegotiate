@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
 from app.constraints.dsl import (
+    AttributeState,
     AttributeValue,
     Candidate,
     ConfirmedConstraint,
@@ -14,6 +15,8 @@ from app.constraints.dsl import (
     Member,
     validate_constraint,
 )
+
+MatchOutcome = str  # "match" | "miss" | "uncertain"
 
 
 class CompileError(ValueError):
@@ -28,6 +31,8 @@ class LinearRow:
     coefficients: tuple[int, ...]
     lower: int | None
     upper: int | None
+    uncertain_indices: tuple[int, ...] = ()
+    """属性未知但未被排除的候选下标；它们计入可行域，但需要待确认。"""
 
     def count(self, indices: Iterable[int]) -> int:
         return sum(self.coefficients[index] for index in indices)
@@ -42,6 +47,29 @@ class LinearRow:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingAttributeCheck:
+    """一条替代要求只能靠未知属性满足时生成的待确认项。"""
+
+    constraint_id: str
+    owner_member_id: int
+    category: str | None
+    attribute_keys: tuple[str, ...]
+    required_count: int
+    confirmed_count: int
+    unconfirmed_candidate_ids: tuple[str, ...]
+
+    def as_dict(self) -> dict:
+        return {
+            "constraint_id": self.constraint_id,
+            "category": self.category,
+            "attribute_keys": list(self.attribute_keys),
+            "required_count": self.required_count,
+            "confirmed_count": self.confirmed_count,
+            "unconfirmed_candidate_ids": list(self.unconfirmed_candidate_ids),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ConstraintModel:
     candidate_ids: tuple[str, ...]
     member_ids: tuple[int, ...]
@@ -53,6 +81,7 @@ class ConstraintModel:
     e: tuple[tuple[int, ...], ...]
     rows: tuple[LinearRow, ...]
     constraint_ids: tuple[str, ...] = ()
+    pending_checks: tuple[PendingAttributeCheck, ...] = ()
 
     @property
     def candidate_count(self) -> int:
@@ -75,16 +104,79 @@ class ConstraintModel:
         return tuple(sorted(self.candidate_ids[index] for index in indices))
 
 
-def _attribute_matches(
-    expected: Mapping[str, AttributeValue], actual: Mapping[str, AttributeValue]
-) -> bool:
+def attribute_match(
+    expected: Mapping[str, AttributeValue], candidate: Candidate
+) -> MatchOutcome:
+    """三态匹配：返回 match / miss / uncertain。
+
+    规则：显式 UNKNOWN 一律 uncertain；有已知状态时按布尔期望判定；
+    没有任何记录也表示未知（未标注 ≠ 不含），绝不静默当成 miss。
+    """
+    uncertain = False
     for key, value in expected.items():
-        if key not in actual:
-            return False
-        observed = actual[key]
-        if type(observed) is not type(value) or observed != value:
-            return False
-    return True
+        state = candidate.attribute_states.get(key)
+        if state is AttributeState.UNKNOWN:
+            uncertain = True
+            continue
+        if state is not None:
+            if isinstance(value, bool):
+                matched = (state is AttributeState.PRESENT) == value
+                if not matched:
+                    return "miss"
+                continue
+            # 三态只能表达“有无”，无法核对字符串/数字取值。
+            uncertain = True
+            continue
+        if key in candidate.attributes:
+            actual = candidate.attributes[key]
+            if type(actual) is not type(value) or actual != value:
+                return "miss"
+            continue
+        uncertain = True
+    return "uncertain" if uncertain else "match"
+
+
+def pending_for_requirement(
+    constraint: ConfirmedConstraint,
+    candidates: Sequence[Candidate],
+    *,
+    eligible_ids: Iterable[str] | None = None,
+    excluded_ids: Iterable[str] | None = None,
+) -> PendingAttributeCheck | None:
+    """计算一条替代要求的待确认项；已确认匹配足够时返回 None。"""
+    if constraint.kind is not ConstraintKind.REQUIRE_COUNT:
+        return None
+    if constraint.owner_member_id is None or constraint.min_count is None:
+        return None
+    allowed = None if eligible_ids is None else frozenset(eligible_ids)
+    banned = frozenset(excluded_ids or ())
+    confirmed = 0
+    unconfirmed: list[str] = []
+    for candidate in candidates:
+        if not candidate.active:
+            continue
+        if candidate.candidate_id in banned:
+            continue
+        if allowed is not None and candidate.candidate_id not in allowed:
+            continue
+        if constraint.category is not None and candidate.category != constraint.category:
+            continue
+        outcome = attribute_match(constraint.attributes, candidate)
+        if outcome == "match":
+            confirmed += 1
+        elif outcome == "uncertain":
+            unconfirmed.append(candidate.candidate_id)
+    if not unconfirmed or confirmed >= constraint.min_count:
+        return None
+    return PendingAttributeCheck(
+        constraint_id=constraint.constraint_id,
+        owner_member_id=constraint.owner_member_id,
+        category=constraint.category,
+        attribute_keys=tuple(sorted(constraint.attributes)),
+        required_count=constraint.min_count,
+        confirmed_count=confirmed,
+        unconfirmed_candidate_ids=tuple(sorted(unconfirmed)),
+    )
 
 
 def _row_coefficients(
@@ -93,16 +185,25 @@ def _row_coefficients(
     eligible: Sequence[int],
     category: str | None,
     attributes: Mapping[str, AttributeValue],
-) -> tuple[int, ...]:
-    coefficients = []
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    coefficients: list[int] = []
+    uncertain: list[int] = []
     for index, candidate in enumerate(model_candidates):
-        matches = eligible[index] == 1
-        if matches and category is not None:
-            matches = candidate.category == category
-        if matches and attributes:
-            matches = _attribute_matches(attributes, candidate.attributes)
-        coefficients.append(1 if matches else 0)
-    return tuple(coefficients)
+        if eligible[index] != 1:
+            coefficients.append(0)
+            continue
+        if category is not None and candidate.category != category:
+            coefficients.append(0)
+            continue
+        if attributes:
+            outcome = attribute_match(attributes, candidate)
+            if outcome == "miss":
+                coefficients.append(0)
+                continue
+            if outcome == "uncertain":
+                uncertain.append(index)
+        coefficients.append(1)
+    return tuple(coefficients), tuple(uncertain)
 
 
 def compile_constraints(
@@ -175,6 +276,7 @@ def compile_constraints(
                 e[slot][position[candidate_id]] = 0
 
     rows: list[LinearRow] = []
+    pending: list[PendingAttributeCheck] = []
     for constraint in constraints:
         if constraint.kind is ConstraintKind.REQUIRE_COUNT:
             if constraint.owner_member_id not in member_slot:
@@ -182,7 +284,7 @@ def compile_constraints(
                     f"替代要求引用未知或已停用成员：{constraint.owner_member_id}"
                 )
             slot = member_slot[constraint.owner_member_id]
-            coefficients = _row_coefficients(
+            coefficients, uncertain = _row_coefficients(
                 active_candidates,
                 eligible=tuple(e[slot]),
                 category=constraint.category,
@@ -194,8 +296,21 @@ def compile_constraints(
                     coefficients=coefficients,
                     lower=constraint.min_count,
                     upper=None,
+                    uncertain_indices=uncertain,
                 )
             )
+            check = pending_for_requirement(
+                constraint,
+                active_candidates,
+                eligible_ids=(
+                    candidate_id
+                    for candidate_id, eligible in zip(candidate_ids, e[slot])
+                    if eligible == 1
+                ),
+                excluded_ids=(candidate_ids[index] for index in excluded),
+            )
+            if check is not None:
+                pending.append(check)
         elif constraint.kind is ConstraintKind.CATEGORY_COUNT:
             coefficients = tuple(
                 1 if candidate.category == constraint.category else 0
@@ -221,4 +336,5 @@ def compile_constraints(
         e=tuple(tuple(row) for row in e),
         rows=tuple(rows),
         constraint_ids=tuple(ids),
+        pending_checks=tuple(pending),
     )

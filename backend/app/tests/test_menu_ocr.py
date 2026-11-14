@@ -48,9 +48,9 @@ def test_parse_image_normalizes_items(api, monkeypatch):
     body = response.json()
     assert body["model"] == "test-model"
     assert body["items"] == [
-        {"name": "宫保鸡丁", "price": "38.00", "category": "荤菜"},
-        {"name": "米饭", "price": "3.00", "category": "未分类"},
-        {"name": "神秘菜", "price": "0.00", "category": "未分类"},
+        {"name": "宫保鸡丁", "price": "38.00", "category": "荤菜", "attributes": []},
+        {"name": "米饭", "price": "3.00", "category": "未分类", "attributes": []},
+        {"name": "神秘菜", "price": "0.00", "category": "未分类", "attributes": []},
     ]
     assert len(body["warnings"]) == 1
 

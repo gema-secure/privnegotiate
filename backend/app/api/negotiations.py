@@ -7,10 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import current_member, require_negotiation
 from app.db.session import get_db
+from app.engine.attributes import correct_candidate_attributes
 from app.engine.projection import build_public_view
 from app.engine.setup import create_negotiation, invite_token, join_negotiation
 from app.models.business import Member
-from app.schemas.commands import CreateNegotiationCommand, JoinNegotiationCommand
+from app.schemas.commands import (
+    CreateNegotiationCommand,
+    JoinNegotiationCommand,
+    SetCandidateAttributesCommand,
+)
 from app.schemas.private_views import CreatedNegotiationView, JoinedMemberView
 from app.schemas.public_views import PublicNegotiationView
 
@@ -60,4 +65,20 @@ def public(
     # 公共指成员共享的字段白名单，不表示允许匿名访问。
     response.headers["Cache-Control"] = "no-store"
     negotiation = require_negotiation(db, negotiation_id)
+    return build_public_view(db, negotiation)
+
+
+@router.post(
+    "/{negotiation_id}/candidates/{candidate_id}/attributes",
+    response_model=PublicNegotiationView,
+)
+def correct_attributes(
+    negotiation_id: int,
+    candidate_id: str,
+    command: SetCandidateAttributesCommand,
+    member=Depends(current_member),
+    db: Session = Depends(get_db),
+) -> PublicNegotiationView:
+    negotiation = require_negotiation(db, negotiation_id)
+    correct_candidate_attributes(db, negotiation, candidate_id, command, member)
     return build_public_view(db, negotiation)

@@ -15,6 +15,7 @@ from app.engine.loading import (
     candidate_dtos,
     constraint_dtos,
     member_dtos,
+    attribute_state_map,
     opt_out_map,
 )
 from app.engine.scheduling import build_scheduling
@@ -59,10 +60,11 @@ def start_round(
     ).all()
 
     negotiation.status = "CHECKING_FEASIBILITY"
+    attribute_map = attribute_state_map(db, negotiation.id)
     try:
         model = compile_constraints(
             constraint_dtos(constraints),
-            candidate_dtos(candidates),
+            candidate_dtos(candidates, attribute_map),
             member_dtos(members),
         )
     except CompileError as exc:
@@ -97,7 +99,7 @@ def start_round(
         negotiation.status = "INFEASIBLE"
     elif result.status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE):
         next_round = negotiation.round_no + 1
-        candidate_tuple = candidate_dtos(candidates)
+        candidate_tuple = candidate_dtos(candidates, attribute_map)
         member_tuple = member_dtos(members)
         constraint_tuple = constraint_dtos(constraints)
         opt_out = opt_out_map(constraint_tuple)
@@ -164,6 +166,12 @@ def start_round(
             "outcome": result.status.value,
             "status": negotiation.status,
             "round_no": negotiation.round_no,
+            "attribute_pending": [
+                check.as_dict() for check in model.pending_checks
+            ],
+            "advisories": [
+                issue.code for issue in report.issues if not issue.definite
+            ],
         },
         actor_member_id=actor_member_id,
     )

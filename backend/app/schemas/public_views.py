@@ -9,18 +9,27 @@ from pydantic import Field
 from app.schemas.commands import NegotiationStatus, StrictModel
 
 
+class PublicAttributeView(StrictModel):
+    key: str
+    state: Literal["present", "absent", "unknown"]
+    source: Literal["import", "manual", "correction"]
+
+
 class PublicCandidateView(StrictModel):
     candidate_id: str
     name: str
     cost_cents: int
     category: str
     confirmed_attributes: dict[str, str | int | bool] = Field(default_factory=dict)
+    attributes: list[PublicAttributeView] = Field(default_factory=list)
+    """菜品自身的三态事实，不属于任何成员的个人敏感信息。"""
 
 
 class PublicConditionView(StrictModel):
     budget_cents: int
     exact_count: int
     round_limit: int
+    member_count: int = 3
     category_limits: dict[str, int] = Field(default_factory=dict)
     condition_version: int
 

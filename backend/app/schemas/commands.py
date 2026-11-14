@@ -44,17 +44,55 @@ class AlgorithmProfile(str, Enum):
     MEAN_FAIR_V1 = "mean_fair_v1"
 
 
+class CandidateAttributeState(str, Enum):
+    """菜品属性的三态事实：已知含 / 已知不含 / 未知。"""
+
+    PRESENT = "present"
+    ABSENT = "absent"
+    UNKNOWN = "unknown"
+
+
+class CandidateAttributeSource(str, Enum):
+    IMPORT = "import"
+    MANUAL = "manual"
+    CORRECTION = "correction"
+
+
+class CandidateAttributeInput(StrictModel):
+    key: str = Field(min_length=1, max_length=64)
+    state: CandidateAttributeState
+    source: CandidateAttributeSource = CandidateAttributeSource.MANUAL
+    source_detail: str | None = Field(default=None, max_length=120)
+
+
 class CandidateInput(StrictModel):
     candidate_id: CandidateId
     name: str = Field(min_length=1, max_length=120)
     cost_cents: Cents
     category: str = Field(default="unknown", min_length=1, max_length=64)
     confirmed_attributes: dict[str, str | int | bool] = Field(default_factory=dict)
+    attributes: list[CandidateAttributeInput] = Field(default_factory=list)
+
+    @field_validator("attributes")
+    @classmethod
+    def _validate_attributes(
+        cls, value: list[CandidateAttributeInput]
+    ) -> list[CandidateAttributeInput]:
+        keys = [item.key for item in value]
+        if len(keys) != len(set(keys)):
+            raise ValueError("属性 key 必须唯一")
+        if any(
+            item.source is CandidateAttributeSource.CORRECTION for item in value
+        ):
+            raise ValueError("创建或导入时属性来源只能是 import 或 manual")
+        return value
 
 
 class CreateNegotiationCommand(StrictModel):
     title: str = Field(min_length=1, max_length=120)
     initiator_name: str = Field(min_length=1, max_length=32)
+    member_count: int = Field(default=3, ge=3)
+    """声明的小组人数；低于 3 人拒绝创建，上限由服务端 max_members 约束。"""
     candidates: list[CandidateInput] = Field(min_length=13, max_length=30)
     budget_cents: Cents
     exact_count: int = Field(ge=1, le=8)
@@ -75,6 +113,23 @@ class CreateNegotiationCommand(StrictModel):
     def _category_limits_in_range(cls, value: dict[str, int]) -> dict[str, int]:
         if any(limit < 0 or limit > 30 for limit in value.values()):
             raise ValueError("类别上限必须在 0–30 之间")
+        return value
+
+
+class SetCandidateAttributesCommand(StrictModel):
+    """发起者人工修正菜品属性，写入修正记录；只改事实，不改成员底线。"""
+
+    attributes: list[CandidateAttributeInput] = Field(min_length=1, max_length=50)
+    reason: str | None = Field(default=None, max_length=500)
+
+    @field_validator("attributes")
+    @classmethod
+    def _unique_attribute_keys(
+        cls, value: list[CandidateAttributeInput]
+    ) -> list[CandidateAttributeInput]:
+        keys = [item.key for item in value]
+        if len(keys) != len(set(keys)):
+            raise ValueError("属性 key 必须唯一")
         return value
 
 
@@ -124,6 +179,12 @@ class ConfirmMemberConstraintsCommand(StrictModel):
     constraints: list[MemberConstraintDraft] = Field(default_factory=list, max_length=50)
     no_extra_bottomline: bool = False
     expected_preference_version: int | None = Field(default=None, ge=1)
+
+
+class BottomlineParseCommand(StrictModel):
+    """自然语言底线解析入参；解析结果只作提议，不写入约束。"""
+
+    text: str = Field(min_length=1, max_length=2000)
 
 
 class AnswerMode(str, Enum):
@@ -176,6 +237,12 @@ class ConfirmResultCommand(StrictModel):
     decision_config_version: int = Field(ge=1)
     accept: bool
     reason: str | None = Field(default=None, max_length=500)
+
+
+class CorrectConcernSummaryCommand(StrictModel):
+    """发起者对 AI 辅助摘要做人工修正；原文不变。"""
+
+    summary: str = Field(min_length=1, max_length=200)
 
 
 class SubmitConcernCommand(StrictModel):

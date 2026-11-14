@@ -30,6 +30,7 @@ from app.engine.loading import (
     candidate_dtos,
     constraint_dtos,
     member_dtos,
+    attribute_state_map,
     opt_out_map,
 )
 from app.engine.scheduling import build_scheduling
@@ -218,7 +219,9 @@ def begin_round_close(
         input_event_cutoff=max_event,
         round_limit=negotiation.round_limit,
         config=dict(negotiation.config_json or {}),
-        candidates=candidate_dtos(candidates),
+        candidates=candidate_dtos(
+            candidates, attribute_state_map(db, negotiation.id)
+        ),
         members=member_dtos(member_rows),
         constraints=constraint_dtos(constraints),
         answers=answer_observations(answers),
