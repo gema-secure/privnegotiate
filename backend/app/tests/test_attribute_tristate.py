@@ -240,7 +240,9 @@ def test_api_persists_tristate_and_correction_clears_pending(api) -> None:
         )
         assert response.status_code == 200, response.text
 
-    public = client.get(f"/negotiations/{negotiation_id}/public")
+    public = client.get(
+        f"/negotiations/{negotiation_id}/public", headers=owner_headers
+    )
     assert public.status_code == 200
     first = public.json()["candidates"][0]
     assert first["attributes"] == [

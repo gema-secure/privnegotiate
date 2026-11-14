@@ -85,12 +85,13 @@ def test_public_whitelist_is_same_for_member_and_initiator(api):
             "pending_action",
         }
         assert set(data["conditions"]) == {
-            "budget_cents", "exact_count", "round_limit", "category_limits",
-            "condition_version",
+            "budget_cents", "exact_count", "round_limit", "member_count",
+            "category_limits", "condition_version",
         }
         for candidate in data["candidates"]:
             assert set(candidate) == {
-                "candidate_id", "name", "cost_cents", "category", "confirmed_attributes",
+                "candidate_id", "name", "cost_cents", "category",
+                "confirmed_attributes", "attributes",
             }
         if data["recommendation"] is not None:
             assert set(data["recommendation"]) == {
