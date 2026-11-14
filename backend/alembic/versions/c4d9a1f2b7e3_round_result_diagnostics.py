@@ -20,9 +20,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # MySQL 8 的 JSON 列默认值必须写成表达式，字面量 DEFAULT '{}' 会被判为非法默认值。
+    default = "('{}')" if op.get_bind().dialect.name == "mysql" else "'{}'"
     op.add_column(
         'round_result',
-        sa.Column('diagnostics', sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
+        sa.Column('diagnostics', sa.JSON(), nullable=False, server_default=sa.text(default)),
     )
 
 
