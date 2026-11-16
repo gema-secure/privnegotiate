@@ -12,7 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12.14'
+          # 3.12.14 仅发布了 linux/rhel 构建，Windows 上 setup-python 会报版本不存在；
+          # 3.12.9 是 actions/python-versions 清单中三平台齐全的最高 3.12.x
+          python-version: '3.12.9'
       - uses: actions/setup-node@v4
         with:
           node-version: '24.16.0'
