@@ -19,18 +19,54 @@ from app.models.business import (
 PUBLIC_BUDGET_ID = "pub_budget"
 PUBLIC_EXACT_ID = "pub_exact"
 
+# 公共作用域的整组避开仍由某位成员提交；该标记只用于定位旧行，不参与约束语义。
+SOURCE_MEMBER_KEY = "_source_member_id"
 
-def _deactivate(db: Session, negotiation_id: int, *, owner_member_id: int | None) -> None:
+_PUBLIC_CONDITION_KINDS = frozenset(
+    {
+        ConstraintKind.BUDGET.value,
+        ConstraintKind.EXACT_COUNT.value,
+        ConstraintKind.CATEGORY_COUNT.value,
+    }
+)
+
+
+def _deactivate_public_conditions(db: Session, negotiation_id: int) -> None:
+    """只替换公共条件，不触碰成员提交的整组避开。"""
+    stmt = select(ConfirmedConstraint).where(
+        ConfirmedConstraint.negotiation_id == negotiation_id,
+        ConfirmedConstraint.active.is_(True),
+        ConfirmedConstraint.owner_member_id.is_(None),
+        ConfirmedConstraint.kind.in_(tuple(_PUBLIC_CONDITION_KINDS)),
+    )
+    for row in db.scalars(stmt).all():
+        row.active = False
+
+
+def _deactivate_member_constraints(
+    db: Session,
+    negotiation_id: int,
+    member_id: int,
+    incoming_ids: set[str],
+) -> None:
+    """停用本人旧底线：成员级按 owner 停用，公共整组避开设提交来源停用。"""
     stmt = select(ConfirmedConstraint).where(
         ConfirmedConstraint.negotiation_id == negotiation_id,
         ConfirmedConstraint.active.is_(True),
     )
-    if owner_member_id is not None:
-        stmt = stmt.where(ConfirmedConstraint.owner_member_id == owner_member_id)
-    else:
-        stmt = stmt.where(ConfirmedConstraint.owner_member_id.is_(None))
     for row in db.scalars(stmt).all():
-        row.active = False
+        if row.owner_member_id == member_id:
+            row.active = False
+            continue
+        if row.owner_member_id is not None or row.kind != ConstraintKind.EXCLUDE_ITEM.value:
+            continue
+        source = (row.payload or {}).get(SOURCE_MEMBER_KEY)
+        if source == member_id:
+            row.active = False
+        elif source is None:
+            # 兼容修复前写入的历史行：默认 ID 带成员前缀，或本次沿用同一自定义 ID。
+            if row.constraint_id.startswith(f"m{member_id}_") or row.constraint_id in incoming_ids:
+                row.active = False
 
 
 def _insert(
@@ -43,6 +79,7 @@ def _insert(
     owner_member_id: int | None,
     payload: dict,
     version: int,
+    source_member_id: int | None = None,
 ) -> None:
     constraint = DslConstraint(
         constraint_id=constraint_id,
@@ -56,6 +93,9 @@ def _insert(
         validate_constraint(constraint)
     except DslError as exc:
         raise invalid("CONSTRAINT_INVALID", str(exc)) from exc
+    stored = dict(payload)
+    if source_member_id is not None:
+        stored[SOURCE_MEMBER_KEY] = source_member_id
     db.add(
         ConfirmedConstraint(
             negotiation_id=negotiation.id,
@@ -63,7 +103,7 @@ def _insert(
             owner_member_id=owner_member_id,
             scope=scope.value,
             kind=kind.value,
-            payload=payload,
+            payload=stored,
             confirmed_version=version,
             active=True,
         )
@@ -79,7 +119,7 @@ def write_public_conditions(
     category_limits: dict[str, int],
     version: int,
 ) -> None:
-    _deactivate(db, negotiation.id, owner_member_id=None)
+    _deactivate_public_conditions(db, negotiation.id)
     _insert(
         db,
         negotiation,
@@ -132,7 +172,11 @@ def confirm_member_constraints(
         )
 
     next_version = negotiation.constraint_version + 1
-    _deactivate(db, negotiation.id, owner_member_id=member.id)
+    incoming_ids = {
+        draft.constraint_id or f"m{member.id}_{draft.kind.value}_{index}"
+        for index, draft in enumerate(command.constraints)
+    }
+    _deactivate_member_constraints(db, negotiation.id, member.id, incoming_ids)
 
     seen: set[str] = set()
     written: list[str] = []
@@ -167,6 +211,7 @@ def confirm_member_constraints(
             owner_member_id=None if is_group_exclude else member.id,
             payload=payload,
             version=next_version,
+            source_member_id=member.id if is_group_exclude else None,
         )
         written.append(constraint_id)
         payloads.append({"constraint_id": constraint_id, "kind": draft.kind.value})

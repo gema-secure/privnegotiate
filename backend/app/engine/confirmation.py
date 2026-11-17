@@ -213,8 +213,20 @@ def organizer_decision(
                 "PUBLIC_ADJUSTMENT_REQUIRED",
                 "无解或待复查时继续协商必须调整公共条件",
             )
-        _apply_adjustment(db, negotiation, command)
+        adjusted = command.public_adjustment is not None
+        _apply_public_adjustment(db, negotiation, command)
         invalidate_confirmations(db, negotiation, reason="initiator_continue")
+        started = start_round(db, negotiation, actor_member_id=member.id)
+        if started.reason == "no_questions" and not adjusted:
+            # 只追加轮数、又没有可问的题：明确失败，不留下“已继续”的假成功。
+            raise conflict(
+                "NO_QUESTIONS_TO_ASK",
+                "所有可选候选都已被成员评价，追加轮数不会产生新的可作答题；"
+                "请调整公共条件后再继续。",
+            )
+        applied_extra_rounds = command.extra_rounds if started.round_issued else None
+        if applied_extra_rounds:
+            negotiation.round_limit += applied_extra_rounds
         if concern is not None:
             concern.status = "resolved"
         else:
@@ -230,7 +242,7 @@ def organizer_decision(
             concern_id=concern.id if concern else None,
             result_version=negotiation.active_result_version,
             action="continue",
-            extra_rounds=command.extra_rounds,
+            extra_rounds=applied_extra_rounds,
             adjustments=(
                 command.public_adjustment.model_dump(exclude_none=True)
                 if command.public_adjustment
@@ -246,18 +258,25 @@ def organizer_decision(
             "INITIATOR_DECISION",
             {
                 "action": "continue",
-                "extra_rounds": command.extra_rounds,
-                "adjusted": command.public_adjustment is not None,
+                "requested_extra_rounds": command.extra_rounds,
+                "applied_extra_rounds": applied_extra_rounds,
+                "adjusted": adjusted,
+                "round_issued": started.round_issued,
+                "reason": started.reason,
+                "round_no": negotiation.round_no,
             },
             actor_member_id=member.id,
         )
         decision.event_id = event.id
-        start_round(db, negotiation, actor_member_id=member.id)
         db.commit()
         return {
             "negotiation_status": negotiation.status,
             "action": "continue",
             "concern_id": decision.concern_id,
+            "round_no": negotiation.round_no,
+            "round_issued": started.round_issued,
+            "outcome": _continue_outcome(started),
+            "message": started.message,
         }
 
     open_concerns = list(
@@ -293,13 +312,26 @@ def organizer_decision(
         "negotiation_status": negotiation.status,
         "action": "stop",
         "concern_id": decision.concern_id,
+        "round_no": negotiation.round_no,
+        "round_issued": False,
+        "outcome": "stopped",
+        "message": "协商已停止",
     }
 
 
-def _apply_adjustment(db: Session, negotiation: Negotiation, command) -> None:
+def _continue_outcome(started) -> str:
+    if started.round_issued:
+        return "round_issued"
+    if started.reason == "no_questions":
+        return "no_new_questions"
+    if started.reason == "infeasible":
+        return "infeasible"
+    return "retry"
+
+
+def _apply_public_adjustment(db: Session, negotiation: Negotiation, command) -> None:
+    """只落公共条件；追加轮数在确认确实发出新轮后再加。"""
     adjustment = command.public_adjustment
-    if command.extra_rounds is not None:
-        negotiation.round_limit += command.extra_rounds
     if adjustment is None:
         return
 
@@ -323,4 +355,3 @@ def _apply_adjustment(db: Session, negotiation: Negotiation, command) -> None:
         category_limits=limits,
         version=negotiation.constraint_version,
     )
-    invalidate_confirmations(db, negotiation, reason="public_adjusted")

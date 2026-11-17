@@ -5,7 +5,7 @@ import { showConfirmDialog, showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
 import AttributeChips from "../components/AttributeChips.vue";
 import QrCode from "../components/QrCode.vue";
-import { api, errorMessage } from "../api";
+import { ApiError, api, errorMessage } from "../api";
 import { parseYuan, shortDate, statusLabel, yuan } from "../format";
 import { loadSession, session } from "../session";
 import type {
@@ -14,6 +14,7 @@ import type {
   CandidateAttributeInput,
   MyState,
   OrganizerConcern,
+  OrganizerDecisionResult,
   PublicNegotiation,
 } from "../types";
 
@@ -32,6 +33,12 @@ const action = ref<"continue" | "stop">("continue");
 const extraRounds = ref(1);
 const budgetInput = ref("");
 let budgetInitialized = false;
+
+const decisionNotice = ref<{
+  tone: "info" | "warn";
+  title: string;
+  text: string;
+} | null>(null);
 
 const token = computed(() => session.current?.token ?? null);
 const isInitiator = computed(() => session.current?.role === "initiator");
@@ -253,6 +260,38 @@ async function retryCompute() {
   }
 }
 
+function continueDecisionNotice(result: OrganizerDecisionResult) {
+  const text = result.message || "";
+  switch (result.outcome) {
+    case "round_issued":
+      return null;
+    case "no_new_questions":
+      return {
+        tone: "warn" as const,
+        title: "条件已生效，但本轮没有新增作答",
+        text: text || "公共条件已更新，但没有新的可问问题；本轮未发出新的作答请求。",
+      };
+    case "infeasible":
+      return {
+        tone: "warn" as const,
+        title: "条件已生效，但当前仍找不到可行组合",
+        text: text || "公共条件已更新，但本次计算没有可行方案，请继续调整条件。",
+      };
+    case "retry":
+      return {
+        tone: "info" as const,
+        title: "条件已生效，但本轮尚未发出新题",
+        text: text || "公共条件已更新；本轮计算等待重试，还没有新的作答请求。",
+      };
+    default:
+      return {
+        tone: "info" as const,
+        title: "公共条件已生效",
+        text: text || "操作已完成，请以当前页面状态为准。",
+      };
+  }
+}
+
 async function submitDecision() {
   if (!token.value || !pub.value || busy.value) return;
   error.value = "";
@@ -281,7 +320,7 @@ async function submitDecision() {
       title: action.value === "continue" ? "调整并继续协商" : "保留异议并结束",
       message:
         action.value === "continue"
-          ? "公共条件调整后旧版本的确认会失效，应用会重新计算并再次请求成员确认。"
+          ? "公共条件调整后旧版本的确认会失效，应用会重新计算并再次请求成员确认；若没有可问的问题会明确提示，不会静默增加轮数。"
           : "本次协商将以「存在未解决顾虑」结束，公开方案保留，但不会标记为全员同意。",
       confirmButtonText: action.value === "continue" ? "继续协商" : "结束本次协商",
     });
@@ -292,26 +331,34 @@ async function submitDecision() {
   busy.value = true;
   try {
     if (action.value === "continue") {
-      await api.organizerDecision(id, token.value, {
+      const result = await api.organizerDecision(id, token.value, {
         action: "continue",
         concern_id: openConcerns.value[0]?.concern_id ?? null,
         extra_rounds: extraRounds.value,
         public_adjustment: adjustment,
       });
+      decisionNotice.value = continueDecisionNotice(result);
+      if (result.outcome === "round_issued") {
+        showToast(`已进入第 ${result.round_no} 轮，等待成员作答`);
+      }
     } else {
       await api.organizerDecision(id, token.value, {
         action: "stop",
         concern_id: openConcerns.value[0]?.concern_id ?? null,
       });
+      decisionNotice.value = null;
+      showToast("已结束，异议记录已保留");
     }
-    showToast(
-      action.value === "continue" ? "已继续协商，等待重新计算" : "已结束，异议记录已保留",
-    );
     action.value = "continue";
     extraRounds.value = 1;
     await refresh();
   } catch (err) {
-    error.value = errorMessage(err);
+    if (err instanceof ApiError && err.code === "NO_QUESTIONS_TO_ASK") {
+      decisionNotice.value = null;
+      error.value = `没有可问的问题，条件未变更。${err.message}`;
+    } else {
+      error.value = errorMessage(err);
+    }
   } finally {
     busy.value = false;
   }
@@ -607,6 +654,22 @@ onMounted(refresh);
           <div v-if="action === 'continue'" class="notice mt16">
             <AppIcon name="shield" :size="15" />
             <span>涉及个人限制的修改仍回到本人确认；发起者不能代替成员放宽底线。</span>
+          </div>
+
+          <div
+            v-if="decisionNotice"
+            class="notice decision-notice mt16"
+            :class="decisionNotice.tone === 'warn' ? 'amber' : ''"
+            role="status"
+          >
+            <AppIcon
+              :name="decisionNotice.tone === 'warn' ? 'warning' : 'info'"
+              :size="15"
+            />
+            <span>
+              <b>{{ decisionNotice.title }}</b>
+              <span>{{ decisionNotice.text }}</span>
+            </span>
           </div>
 
           <div v-if="error" class="error-box" role="alert">{{ error }}</div>

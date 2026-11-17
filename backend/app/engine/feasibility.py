@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -34,14 +36,25 @@ from app.solver.mean_fair import SolveStatus
 from app.engine.closing import solver_config
 
 
+@dataclass(frozen=True, slots=True)
+class RoundStartResult:
+    """一次开局尝试的结果；no_questions 表示确实没有新的可作答题。"""
+
+    status: str
+    round_no: int
+    round_issued: bool
+    reason: str
+    message: str = ""
+
+
 def start_round(
     db: Session,
     negotiation: Negotiation,
     *,
     actor_member_id: int | None = None,
     ranking=None,
-) -> str:
-    """在已确认约束上检查可行域并开启下一轮；返回新状态。"""
+) -> RoundStartResult:
+    """在已确认约束上检查可行域并开启下一轮；返回开局结果。"""
     candidates = db.scalars(
         select(Candidate)
         .where(Candidate.negotiation_id == negotiation.id)
@@ -76,11 +89,14 @@ def start_round(
             {"outcome": "model_invalid", "detail": str(exc)},
             actor_member_id=actor_member_id,
         )
-        return negotiation.status
+        return RoundStartResult(
+            negotiation.status, negotiation.round_no, False, "model_invalid", str(exc)
+        )
 
     report = precheck(model)
     if report.definitely_infeasible:
         negotiation.status = "INFEASIBLE"
+        message = "；".join(issue.detail for issue in report.issues)
         append_event(
             db,
             negotiation,
@@ -91,12 +107,18 @@ def start_round(
             },
             actor_member_id=actor_member_id,
         )
-        return negotiation.status
+        return RoundStartResult(
+            negotiation.status, negotiation.round_no, False, "infeasible", message
+        )
 
     zero_mu = [[0.0] * model.candidate_count for _ in range(model.member_count)]
     result = solve_mean_fair(zero_mu, model, solver_config(negotiation))
+    reason = "issued"
+    message = ""
     if result.status is SolveStatus.INFEASIBLE:
         negotiation.status = "INFEASIBLE"
+        reason = "infeasible"
+        message = result.message
     elif result.status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE):
         next_round = negotiation.round_no + 1
         candidate_tuple = candidate_dtos(candidates, attribute_map)
@@ -153,10 +175,15 @@ def start_round(
         if created:
             negotiation.round_no = next_round
             negotiation.status = "ASKING"
+            message = f"第 {next_round} 轮问题已发出"
         else:
             negotiation.status = "BEST_EFFORT"
+            reason = "no_questions"
+            message = "所有可选候选都已被成员评价，没有新的可作答题"
     else:
         negotiation.status = "RETRY_OR_REVIEW"
+        reason = "solver_retry"
+        message = result.message
 
     append_event(
         db,
@@ -166,6 +193,8 @@ def start_round(
             "outcome": result.status.value,
             "status": negotiation.status,
             "round_no": negotiation.round_no,
+            "round_issued": reason == "issued",
+            "reason": reason,
             "attribute_pending": [
                 check.as_dict() for check in model.pending_checks
             ],
@@ -175,4 +204,10 @@ def start_round(
         },
         actor_member_id=actor_member_id,
     )
-    return negotiation.status
+    return RoundStartResult(
+        negotiation.status,
+        negotiation.round_no,
+        reason == "issued",
+        reason,
+        message,
+    )

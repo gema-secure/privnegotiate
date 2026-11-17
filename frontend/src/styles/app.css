@@ -1725,3 +1725,57 @@ body {
   line-height: 1.6;
   resize: vertical;
 }
+
+/* ---------- 属性类替代要求 ---------- */
+.alt-attrs {
+  display: grid;
+  gap: 8px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-2);
+}
+
+.alt-attrs .hint {
+  margin: 0;
+}
+
+.attr-cond-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.attr-cond-row input,
+.attr-cond-row select {
+  min-height: 34px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .attr-cond-row {
+    grid-template-columns: minmax(0, 1fr) 110px;
+  }
+
+  .attr-cond-row .btn {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- 发起者决策结果提示 ---------- */
+.decision-notice > span {
+  display: grid;
+  gap: 3px;
+}
+
+.decision-notice b {
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.decision-notice span > span {
+  font-size: 12px;
+  line-height: 1.6;
+}

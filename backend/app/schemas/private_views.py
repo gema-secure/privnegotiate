@@ -67,6 +67,16 @@ class OrganizerDecisionView(StrictModel):
     negotiation_status: NegotiationStatus
     action: str
     concern_id: int | None = None
+    round_no: int = 0
+    round_issued: bool = False
+    outcome: Literal[
+        "round_issued",
+        "no_new_questions",
+        "infeasible",
+        "retry",
+        "stopped",
+    ] = "round_issued"
+    message: str = ""
 
 
 class MemberIdentityView(StrictModel):

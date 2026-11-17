@@ -241,6 +241,10 @@ export interface OrganizerDecisionResult {
   negotiation_status: NegotiationStatus;
   action: string;
   concern_id: number | null;
+  round_no: number;
+  round_issued: boolean;
+  outcome: "round_issued" | "no_new_questions" | "infeasible" | "retry" | "stopped";
+  message: string;
 }
 
 export interface CandidateDraft {

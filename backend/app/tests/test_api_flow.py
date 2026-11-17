@@ -661,3 +661,174 @@ def test_group_exclude_is_public_and_applies_to_every_member(api):
     assert ids_b.isdisjoint(group_excluded), "整组避开应对其他成员同样生效"
     assert ids_a == {"c01", "c02"}, "本人不参与只压缩本人的候选池"
     assert ids_b == {"c01", "c02", "c03"}, "本人不参与不得污染其他成员"
+
+
+def test_resubmitting_bottomline_replaces_public_group_exclude(api):
+    """成员回头改底线时，旧的公共整组避开必须被替换而不是叠加。"""
+    client, factory = api
+    created = client.post(
+        "/negotiations",
+        json={
+            "title": "周五聚餐",
+            "initiator_name": "组长",
+            "candidates": _candidates(),
+            "budget_cents": 6000,
+            "exact_count": 2,
+            "round_limit": 3,
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    negotiation_id = body["negotiation_id"]
+    joined = client.post(
+        f"/negotiations/{negotiation_id}/members",
+        json={"invite_token": body["invite_token"], "display_name": "小林"},
+    )
+    assert joined.status_code == 201, joined.text
+    headers = {
+        "a": {"Authorization": f"Bearer {body['member_token']}"},
+        "b": {"Authorization": f"Bearer {joined.json()['member_token']}"},
+    }
+
+    payload = {
+        "constraints": [
+            {"kind": "exclude_item", "candidate_ids": ["c04", "c05"]},
+            {"kind": "opt_out", "candidate_ids": ["c03"]},
+        ],
+        "no_extra_bottomline": False,
+    }
+    for _ in range(2):
+        saved = client.post(
+            f"/negotiations/{negotiation_id}/me/constraints",
+            json=payload,
+            headers=headers["a"],
+        )
+        assert saved.status_code == 200, saved.text
+
+    with factory() as session:
+        rows = session.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == negotiation_id,
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+    exclude_rows = [row for row in rows if row.kind == "exclude_item"]
+    opt_out_rows = [row for row in rows if row.kind == "opt_out"]
+    assert len(exclude_rows) == 1, "公共整组避开只应保留一条 active 记录"
+    assert exclude_rows[0].scope == "public"
+    assert exclude_rows[0].owner_member_id is None
+    assert len(opt_out_rows) == 1, "成员级约束也只应保留一条 active 记录"
+
+    finished = client.post(
+        f"/negotiations/{negotiation_id}/me/constraints",
+        json={"constraints": [], "no_extra_bottomline": True},
+        headers=headers["b"],
+    )
+    assert finished.status_code == 200, finished.text
+    state = _me(client, negotiation_id, headers["a"])
+    assert state["status"] == "ASKING", "重复提交底线后仍应正常开局"
+    assert state["round_no"] == 1
+
+
+def test_continue_without_new_questions_is_explicit(api):
+    """没有新题可发时，+1 轮不得静默成功；调整公共条件仍须落库。"""
+    client, factory = api
+    created = client.post(
+        "/negotiations",
+        json={
+            "title": "周五聚餐",
+            "initiator_name": "组长",
+            "candidates": _candidates(),
+            "budget_cents": 6000,
+            "exact_count": 2,
+            "round_limit": 2,
+        },
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    negotiation_id = body["negotiation_id"]
+    joined = client.post(
+        f"/negotiations/{negotiation_id}/members",
+        json={"invite_token": body["invite_token"], "display_name": "小林"},
+    )
+    assert joined.status_code == 201, joined.text
+    headers = {
+        "a": {"Authorization": f"Bearer {body['member_token']}"},
+        "b": {"Authorization": f"Bearer {joined.json()['member_token']}"},
+    }
+
+    excluded = [f"c{index:02d}" for index in range(3, 14)]
+    saved = client.post(
+        f"/negotiations/{negotiation_id}/me/constraints",
+        json={"constraints": [{"kind": "exclude_item", "candidate_ids": excluded}]},
+        headers=headers["a"],
+    )
+    assert saved.status_code == 200, saved.text
+    finished = client.post(
+        f"/negotiations/{negotiation_id}/me/constraints",
+        json={"constraints": [], "no_extra_bottomline": True},
+        headers=headers["b"],
+    )
+    assert finished.status_code == 200, finished.text
+
+    for key in ("a", "b"):
+        batch = _me(client, negotiation_id, headers[key])["question_batch"]
+        assert batch is not None
+        assert {item["candidate_id"] for item in batch["items"]} == {"c01", "c02"}
+        assert _answer(client, negotiation_id, headers[key], batch, acceptable=1).status_code == 200
+
+    closed = _close(client, negotiation_id, headers["a"], 1)
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["negotiation_status"] == "BEST_EFFORT"
+
+    continue_cmd = {
+        "action": "continue",
+        "extra_rounds": 1,
+        "public_adjustment": None,
+    }
+    rejected = client.post(
+        f"/negotiations/{negotiation_id}/organizer/decision",
+        json=continue_cmd,
+        headers=headers["a"],
+    )
+    assert rejected.status_code == 409, rejected.text
+    assert rejected.json()["code"] == "NO_QUESTIONS_TO_ASK"
+
+    with factory() as session:
+        negotiation = session.get(Negotiation, negotiation_id)
+        assert negotiation.round_limit == 2, "没有发出新轮时不得静默增加轮数"
+        assert negotiation.status == "BEST_EFFORT"
+
+    adjusted = client.post(
+        f"/negotiations/{negotiation_id}/organizer/decision",
+        json={
+            "action": "continue",
+            "extra_rounds": 1,
+            "public_adjustment": {"budget_cents": 1900},
+        },
+        headers=headers["a"],
+    )
+    assert adjusted.status_code == 200, adjusted.text
+    outcome = adjusted.json()
+    assert outcome["round_issued"] is False
+    assert outcome["outcome"] == "no_new_questions"
+    assert outcome["message"]
+    assert outcome["round_no"] == 1
+
+    public = client.get(
+        f"/negotiations/{negotiation_id}/public", headers=headers["a"]
+    ).json()
+    assert public["conditions"]["budget_cents"] == 1900, "条件调整必须真实落库"
+    assert public["conditions"]["round_limit"] == 2, "未发出新轮不得追加轮数"
+    assert public["status"] == "BEST_EFFORT"
+
+    with factory() as session:
+        budgets = session.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == negotiation_id,
+                ConfirmedConstraint.kind == "budget",
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+        assert len(budgets) == 1
+        assert budgets[0].payload["amount_cents"] == 1900

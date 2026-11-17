@@ -8,6 +8,7 @@ import { api, errorMessage } from "../api";
 import { yuan } from "../format";
 import { loadSession, session } from "../session";
 import type {
+  AttributeState,
   BottomlineParse,
   BottomlineProposal,
   MyState,
@@ -30,8 +31,35 @@ const optOut = ref<string[]>([]);
 const wantAlternative = ref(false);
 const altCategory = ref("");
 const altCount = ref(1);
+const altAttributes = ref<Array<{ key: string; state: AttributeState }>>([]);
+const legacyAttributes = ref<Record<string, string | number | boolean>>({});
 const noExtra = ref(false);
 let initialized = false;
+
+function addAltAttribute() {
+  altAttributes.value.push({ key: "", state: "present" });
+  noExtra.value = false;
+}
+
+function removeAltAttribute(index: number) {
+  altAttributes.value = altAttributes.value.filter((_, position) => position !== index);
+}
+
+const attributeKeys = computed(() => {
+  const keys = new Set<string>();
+  for (const candidate of pub.value?.candidates ?? []) {
+    for (const attr of candidate.attributes) keys.add(attr.key);
+  }
+  return [...keys];
+});
+
+const knownAltAttributes = computed(() =>
+  altAttributes.value.filter((item) => item.key.trim() && item.state !== "unknown"),
+);
+
+const altHasUnknown = computed(() =>
+  altAttributes.value.some((item) => item.key.trim() && item.state === "unknown"),
+);
 
 /* ---------- 自然语言底线解析（只出提议，不落库） ---------- */
 const nlText = ref("");
@@ -129,7 +157,7 @@ function applyProposals() {
   optOut.value = [...new Set(optOut.value)];
   applied.value = true;
   applyNotice.value = skipped.length
-    ? `已填入勾选的提议；以下提议含属性条件，当前表单只支持类别条件，请手工补充：${skipped.join("；")}`
+    ? `已填入勾选的提议；以下提议含属性条件，解析契约未返回 attributes，请在下方替代要求中手工添加属性条件：${skipped.join("；")}`
     : "已填入下方表单。请逐条核对，确认无误后再点击「确认底线」提交。";
 }
 
@@ -143,7 +171,7 @@ const hasConditions = computed(
   () =>
     exclude.value.length > 0 ||
     optOut.value.length > 0 ||
-    (wantAlternative.value && !!altCategory.value),
+    (wantAlternative.value && (!!altCategory.value || knownAltAttributes.value.length > 0)),
 );
 
 function candidateName(cid: string): string {
@@ -160,6 +188,15 @@ function initialize() {
       wantAlternative.value = true;
       altCategory.value = constraint.category ?? "";
       altCount.value = constraint.min_count ?? 1;
+      altAttributes.value = [];
+      legacyAttributes.value = {};
+      for (const [key, value] of Object.entries(constraint.attributes ?? {})) {
+        if (typeof value === "boolean") {
+          altAttributes.value.push({ key, state: value ? "present" : "absent" });
+        } else {
+          legacyAttributes.value[key] = value;
+        }
+      }
     }
   }
   exclude.value = [...new Set(exclude.value)];
@@ -214,9 +251,21 @@ async function submit() {
     error.value = "同一个候选不能同时设置为「整组避开」和「仅我不参与」，请确认作用范围。";
     return;
   }
-  if (wantAlternative.value && !altCategory.value) {
-    error.value = "替代要求需要选择一个类别，例如「素菜」或「交通」。";
-    return;
+  if (wantAlternative.value) {
+    if (!altCategory.value && !knownAltAttributes.value.length) {
+      error.value =
+        "替代要求需要至少一个类别，或至少一条「含 / 不含」属性条件；未知不能单独作为条件提交。";
+      return;
+    }
+    const keys = altAttributes.value.map((item) => item.key.trim()).filter(Boolean);
+    if (keys.length !== altAttributes.value.length) {
+      error.value = "请填写属性条件名，或删除空的属性条件行。";
+      return;
+    }
+    if (new Set(keys).size !== keys.length) {
+      error.value = "同一条替代要求里的属性名不能重复。";
+      return;
+    }
   }
   if (!hasConditions.value && !noExtra.value) {
     error.value = "请勾选你的底线，或明确选择「我没有任何额外底线」。";
@@ -227,6 +276,7 @@ async function submit() {
     kind: "exclude_item" | "opt_out" | "require_count";
     candidate_ids: string[];
     category?: string;
+    attributes?: Record<string, string | number | boolean>;
     min_count?: number;
   }> = [];
   if (exclude.value.length) {
@@ -236,10 +286,16 @@ async function submit() {
     constraints.push({ kind: "opt_out", candidate_ids: optOut.value });
   }
   if (wantAlternative.value) {
+    const attributes: Record<string, string | number | boolean> = { ...legacyAttributes.value };
+    for (const cond of altAttributes.value) {
+      if (cond.state === "unknown") continue;
+      attributes[cond.key.trim()] = cond.state === "present";
+    }
     constraints.push({
       kind: "require_count",
       candidate_ids: [],
-      category: altCategory.value,
+      category: altCategory.value || undefined,
+      attributes: Object.keys(attributes).length ? attributes : undefined,
       min_count: Math.max(1, altCount.value),
     });
   }
@@ -406,9 +462,9 @@ onMounted(refresh);
         </label>
         <div v-if="wantAlternative" class="field-grid mt16">
           <div class="field">
-            <label for="alt-category">要求类别</label>
+            <label for="alt-category">要求类别（可选）</label>
             <select id="alt-category" v-model="altCategory">
-              <option value="">请选择类别</option>
+              <option value="">不限类别</option>
               <option v-for="category in categories" :key="category" :value="category">
                 {{ category }}
               </option>
@@ -419,6 +475,52 @@ onMounted(refresh);
             <input id="alt-count" v-model.number="altCount" type="number" min="1" max="30" />
             <span class="hint">例如「至少 1 项素菜」「至少 2 项户外」，只在满足条件时生效。</span>
           </div>
+        </div>
+
+        <div v-if="wantAlternative" class="alt-attrs mt16">
+          <div class="between">
+            <span class="small-label">属性条件（可选，可与类别组合）</span>
+            <button type="button" class="attr-toggle" @click="addAltAttribute">
+              <AppIcon name="plus" :size="11" />
+              添加属性条件
+            </button>
+          </div>
+          <datalist id="alt-attribute-options">
+            <option v-for="key in attributeKeys" :key="key" :value="key" />
+          </datalist>
+          <div v-for="(cond, index) in altAttributes" :key="index" class="attr-cond-row">
+            <input
+              v-model="cond.key"
+              list="alt-attribute-options"
+              maxlength="64"
+              placeholder="属性名，例如 辣 / 素食"
+              :aria-label="`第 ${index + 1} 条属性条件名`"
+            />
+            <select v-model="cond.state" :aria-label="`第 ${index + 1} 条属性条件状态`">
+              <option value="present">已知含</option>
+              <option value="absent">已知不含</option>
+              <option value="unknown">未知</option>
+            </select>
+            <button
+              type="button"
+              class="btn ghost small"
+              :aria-label="`删除第 ${index + 1} 条属性条件`"
+              @click="removeAltAttribute(index)"
+            >
+              <AppIcon name="close" :size="13" />
+            </button>
+          </div>
+          <p v-if="!altAttributes.length" class="hint">
+            未添加属性条件时，只按类别判定；属性未知的候选不会被当作满足。
+          </p>
+          <p v-else-if="altHasUnknown" class="hint">
+            标为「未知」的条件不会提交为约束。候选属性未知时，系统会自动生成「待确认」项，
+            等发起者补充属性事实后再判定，未知不会被算作满足或折算成不含。
+          </p>
+          <p v-if="Object.keys(legacyAttributes).length" class="hint">
+            另有一条历史属性条件无法在本界面编辑（{{ Object.keys(legacyAttributes).join("、") }}），
+            保存时会原样保留。
+          </p>
         </div>
 
         <div class="notice mt24">

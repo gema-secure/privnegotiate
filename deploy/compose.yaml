@@ -3,13 +3,16 @@ name: privnegotiate
 # 一套编排覆盖两种环境：
 #   本地全量（MySQL/Redis 也起容器）：docker compose --profile local-db up -d --build
 #   云上（RDS + DCS，不启本地数据库）：docker compose up -d --build
-# deploy/.env 同时是 compose 插值源和容器 env_file，启动前必须存在（cp .env.example .env）。
+# 本地用 deploy/.env；云端由 auto-deploy 在仓库根生成 .env。两者都存在时 deploy/.env 优先。
 
 x-app: &app
   build:
     context: ../backend
   env_file:
-    - .env
+    - path: ../.env
+      required: false
+    - path: .env
+      required: false
   restart: unless-stopped
 
 services:
