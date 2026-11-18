@@ -85,7 +85,8 @@ def _insert(
         constraint_id=constraint_id,
         kind=kind,
         scope=scope,
-        owner_member_id=owner_member_id,
+        # DSL 的 public 表示作用范围；数据库另保留提出者用于本人撤回权限。
+        owner_member_id=None if kind is ConstraintKind.EXCLUDE_ITEM else owner_member_id,
         confirmed_version=version,
         **payload,
     )
@@ -100,6 +101,8 @@ def _insert(
         ConfirmedConstraint(
             negotiation_id=negotiation.id,
             constraint_id=constraint_id,
+            # 作用范围是公共（scope=public），但保留提出者，用于本人留任约束与撤回；
+            # 重存底线时按 owner 只停用本人旧行，不影响其他成员提交的整组避开。
             owner_member_id=owner_member_id,
             scope=scope.value,
             kind=kind.value,
@@ -186,6 +189,12 @@ def confirm_member_constraints(
         if constraint_id in seen:
             raise invalid("CONSTRAINT_ID_DUPLICATE", "constraint_id 不能重复")
         seen.add(constraint_id)
+        collision = db.scalars(select(ConfirmedConstraint).where(
+            ConfirmedConstraint.negotiation_id == negotiation.id,
+            ConfirmedConstraint.constraint_id == constraint_id,
+        )).first()
+        if collision is not None and collision.owner_member_id != member.id:
+            raise invalid("CONSTRAINT_ID_INVALID", "请使用本人底线标识")
         kind = ConstraintKind(draft.kind.value)
         # 整组避开是公共约束，必须整组生效且不得绑定成员；
         # 本人不参与与替代要求才是成员级底线，两条路径互不替代。
@@ -208,7 +217,7 @@ def confirm_member_constraints(
             constraint_id=constraint_id,
             kind=kind,
             scope=ConstraintScope.PUBLIC if is_group_exclude else ConstraintScope.MEMBER,
-            owner_member_id=None if is_group_exclude else member.id,
+            owner_member_id=member.id,
             payload=payload,
             version=next_version,
             source_member_id=member.id if is_group_exclude else None,
@@ -233,8 +242,8 @@ def invalidate_confirmations(
             ResultConfirmation.negotiation_id == negotiation.id
         )
     ).all()
-    for row in rows:
-        db.delete(row)
+    # 不删除确认历史；有效性由 decision_config_version 与 result_version 决定。
+    rows = [row for row in rows if row.decision_config_version != negotiation.decision_config_version]
     if rows:
         from app.engine.events import append_event
 

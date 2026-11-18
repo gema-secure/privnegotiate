@@ -5,24 +5,19 @@ import { showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
 import { api, errorMessage } from "../api";
 import { shortDate } from "../format";
-import { loadSession, session } from "../session";
-import type { MyConcern, MyState, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+
 
 const route = useRoute();
 const router = useRouter();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, {});
 
-const pub = ref<PublicNegotiation | null>(null);
-const me = ref<MyState | null>(null);
-const loading = ref(true);
-const error = ref("");
 const submitting = ref(false);
 const acknowledged = ref(false);
 const text = ref("");
 const submitted = ref(false);
 
-const token = computed(() => session.current?.token ?? null);
 const recommendation = computed(() => pub.value?.recommendation ?? null);
 const canSubmit = computed(
   () =>
@@ -34,46 +29,9 @@ const canSubmit = computed(
 );
 const myConcerns = computed(() => me.value?.concerns ?? []);
 
-const SUMMARY_SOURCE_LABEL: Record<MyConcern["summary_source"], string> = {
-  llm: "AI 摘要",
-  manual: "人工修正摘要",
-  none: "无摘要",
-};
-
-const CONCERN_REASON: Record<string, string> = {
-  llm_disabled: "AI 文本能力未启用",
-  llm_unavailable: "AI 服务暂时不可用",
-  llm_bad_output: "AI 输出不合规",
-  empty_input: "输入为空",
-};
-
-function concernDegradedText(concern: MyConcern): string {
-  const reason = concern.summary_degraded_reason;
-  const text = reason ? CONCERN_REASON[reason] ?? reason : "";
-  return text ? `（${text}）` : "";
-}
-
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [publicView, myState] = await Promise.all([
-      api.publicView(id, token.value),
-      api.myState(id, token.value),
-    ]);
-    pub.value = publicView;
-    me.value = myState;
-    submitted.value = myState.concerns.some(
-      (item) => item.result_version === publicView.recommendation?.result_version,
-    );
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  submitted.value = !!me.value?.concerns.some(item => item.result_version === pub.value?.recommendation?.result_version);
 }
 
 async function submit() {
@@ -166,22 +124,6 @@ onMounted(refresh);
           <div v-for="concern in myConcerns" :key="concern.concern_id" class="concern-card">
             <span class="small-label">方案 v{{ concern.result_version }} · 你提交的原文</span>
             <blockquote>{{ concern.text }}</blockquote>
-            <div class="concern-summary">
-              <div class="between">
-                <span class="small-label">摘要</span>
-                <span
-                  class="badge"
-                  :class="concern.summary_source === 'llm' ? 'green' : 'outline'"
-                >
-                  {{ SUMMARY_SOURCE_LABEL[concern.summary_source] }}
-                </span>
-              </div>
-              <p v-if="concern.summary">{{ concern.summary }}</p>
-              <p v-else class="hint">本次没有生成摘要，原文仍完整交给发起者。</p>
-              <p v-if="concern.summary_degraded" class="hint">
-                AI 摘要不可用{{ concernDegradedText(concern) }}，不影响你的提交。
-              </p>
-            </div>
             <p class="hint">原文完整保留，不被摘要替换。</p>
           </div>
           <div class="form-actions">
@@ -204,14 +146,6 @@ onMounted(refresh);
             <span>
               本次补充顾虑将交给发起者，默认不附身份；历史回答和完整选择链不会共享。
               内容本身可能让人推测身份，请自行决定如何表述。
-            </span>
-          </div>
-
-          <div class="notice mt16">
-            <AppIcon name="sparkles" :size="15" />
-            <span>
-              提交后可能生成一段 AI 辅助摘要，供发起者快速阅读并标注来源；AI 不可用时会降级为无摘要。
-              你的原文始终完整保留，发起者也可以手工修正摘要。
             </span>
           </div>
 

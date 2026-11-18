@@ -3,27 +3,16 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
-import AttributeChips from "../components/AttributeChips.vue";
 import { api, errorMessage } from "../api";
 import { yuan } from "../format";
-import { loadSession, session } from "../session";
-import type {
-  AttributeState,
-  BottomlineParse,
-  BottomlineProposal,
-  MyState,
-  PublicNegotiation,
-} from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+
 
 const route = useRoute();
 const router = useRouter();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, {});
 
-const me = ref<MyState | null>(null);
-const pub = ref<PublicNegotiation | null>(null);
-const loading = ref(true);
-const error = ref("");
 const submitting = ref(false);
 
 const exclude = ref<string[]>([]);
@@ -31,137 +20,9 @@ const optOut = ref<string[]>([]);
 const wantAlternative = ref(false);
 const altCategory = ref("");
 const altCount = ref(1);
-const altAttributes = ref<Array<{ key: string; state: AttributeState }>>([]);
-const legacyAttributes = ref<Record<string, string | number | boolean>>({});
 const noExtra = ref(false);
 let initialized = false;
 
-function addAltAttribute() {
-  altAttributes.value.push({ key: "", state: "present" });
-  noExtra.value = false;
-}
-
-function removeAltAttribute(index: number) {
-  altAttributes.value = altAttributes.value.filter((_, position) => position !== index);
-}
-
-const attributeKeys = computed(() => {
-  const keys = new Set<string>();
-  for (const candidate of pub.value?.candidates ?? []) {
-    for (const attr of candidate.attributes) keys.add(attr.key);
-  }
-  return [...keys];
-});
-
-const knownAltAttributes = computed(() =>
-  altAttributes.value.filter((item) => item.key.trim() && item.state !== "unknown"),
-);
-
-const altHasUnknown = computed(() =>
-  altAttributes.value.some((item) => item.key.trim() && item.state === "unknown"),
-);
-
-/* ---------- 自然语言底线解析（只出提议，不落库） ---------- */
-const nlText = ref("");
-const parsing = ref(false);
-const parseResult = ref<BottomlineParse | null>(null);
-const selectedProposals = ref<boolean[]>([]);
-const applied = ref(false);
-const applyNotice = ref("");
-
-const DEGRADED_REASON: Record<string, string> = {
-  llm_disabled: "AI 文本能力未启用",
-  llm_unavailable: "AI 服务暂时不可用",
-  llm_bad_output: "AI 输出不合规",
-  empty_input: "输入为空",
-  no_valid_proposals: "没有解析出可用的底线提议",
-};
-
-const parseFallback = computed(() => {
-  const result = parseResult.value;
-  if (!result) return false;
-  return result.needs_form || result.degraded || result.proposals.length === 0;
-});
-
-const degradedText = computed(() => {
-  const result = parseResult.value;
-  if (!result) return "";
-  const reason = result.reason ? DEGRADED_REASON[result.reason] ?? result.reason : "";
-  return reason || "未获得可用解析";
-});
-
-const KIND_LABEL: Record<BottomlineProposal["kind"], string> = {
-  exclude_item: "整组避开",
-  opt_out: "本人不参与",
-  require_count: "替代要求",
-};
-
-function proposalNames(proposal: BottomlineProposal): string {
-  return proposal.candidate_ids
-    .map((cid) => pub.value?.candidates.find((item) => item.candidate_id === cid)?.name ?? cid)
-    .join("、");
-}
-
-async function parseBottomline() {
-  if (!token.value || parsing.value) return;
-  const text = nlText.value.trim();
-  if (!text) {
-    showToast("请先描述你的底线");
-    return;
-  }
-  parsing.value = true;
-  parseResult.value = null;
-  applyNotice.value = "";
-  try {
-    const result = await api.parseBottomline(id, token.value, text);
-    parseResult.value = result;
-    selectedProposals.value = result.proposals.map(() => true);
-    applied.value = false;
-    if (result.degraded || result.needs_form || !result.proposals.length) {
-      showToast("AI 辅助不可用，请使用下方结构化表单");
-    }
-  } catch (err) {
-    showToast(errorMessage(err));
-  } finally {
-    parsing.value = false;
-  }
-}
-
-function applyProposals() {
-  const result = parseResult.value;
-  if (!result || applied.value) return;
-  const skipped: string[] = [];
-  result.proposals.forEach((proposal, index) => {
-    if (!selectedProposals.value[index]) return;
-    if (proposal.kind === "exclude_item") {
-      for (const cid of proposal.candidate_ids) {
-        if (!exclude.value.includes(cid)) exclude.value.push(cid);
-        optOut.value = optOut.value.filter((item) => item !== cid);
-      }
-    } else if (proposal.kind === "opt_out") {
-      for (const cid of proposal.candidate_ids) {
-        if (!optOut.value.includes(cid)) optOut.value.push(cid);
-        exclude.value = exclude.value.filter((item) => item !== cid);
-      }
-    } else if (proposal.category) {
-      wantAlternative.value = true;
-      altCategory.value = proposal.category;
-      altCount.value = Math.max(1, proposal.min_count ?? 1);
-    } else {
-      skipped.push(proposal.display_text);
-      return;
-    }
-    noExtra.value = false;
-  });
-  exclude.value = [...new Set(exclude.value)];
-  optOut.value = [...new Set(optOut.value)];
-  applied.value = true;
-  applyNotice.value = skipped.length
-    ? `已填入勾选的提议；以下提议含属性条件，解析契约未返回 attributes，请在下方替代要求中手工添加属性条件：${skipped.join("；")}`
-    : "已填入下方表单。请逐条核对，确认无误后再点击「确认底线」提交。";
-}
-
-const token = computed(() => session.current?.token ?? null);
 const categories = computed(() => {
   const values = new Set((pub.value?.candidates ?? []).map((item) => item.category));
   return [...values];
@@ -171,7 +32,7 @@ const hasConditions = computed(
   () =>
     exclude.value.length > 0 ||
     optOut.value.length > 0 ||
-    (wantAlternative.value && (!!altCategory.value || knownAltAttributes.value.length > 0)),
+    (wantAlternative.value && !!altCategory.value),
 );
 
 function candidateName(cid: string): string {
@@ -188,15 +49,6 @@ function initialize() {
       wantAlternative.value = true;
       altCategory.value = constraint.category ?? "";
       altCount.value = constraint.min_count ?? 1;
-      altAttributes.value = [];
-      legacyAttributes.value = {};
-      for (const [key, value] of Object.entries(constraint.attributes ?? {})) {
-        if (typeof value === "boolean") {
-          altAttributes.value.push({ key, state: value ? "present" : "absent" });
-        } else {
-          legacyAttributes.value[key] = value;
-        }
-      }
     }
   }
   exclude.value = [...new Set(exclude.value)];
@@ -224,24 +76,8 @@ function selectNoExtra() {
 }
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [myState, publicView] = await Promise.all([
-      api.myState(id, token.value),
-      api.publicView(id, token.value),
-    ]);
-    me.value = myState;
-    pub.value = publicView;
-    initialize();
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  initialize();
 }
 
 async function submit() {
@@ -251,21 +87,9 @@ async function submit() {
     error.value = "同一个候选不能同时设置为「整组避开」和「仅我不参与」，请确认作用范围。";
     return;
   }
-  if (wantAlternative.value) {
-    if (!altCategory.value && !knownAltAttributes.value.length) {
-      error.value =
-        "替代要求需要至少一个类别，或至少一条「含 / 不含」属性条件；未知不能单独作为条件提交。";
-      return;
-    }
-    const keys = altAttributes.value.map((item) => item.key.trim()).filter(Boolean);
-    if (keys.length !== altAttributes.value.length) {
-      error.value = "请填写属性条件名，或删除空的属性条件行。";
-      return;
-    }
-    if (new Set(keys).size !== keys.length) {
-      error.value = "同一条替代要求里的属性名不能重复。";
-      return;
-    }
+  if (wantAlternative.value && !altCategory.value) {
+    error.value = "替代要求需要选择一个类别，例如「素菜」或「交通」。";
+    return;
   }
   if (!hasConditions.value && !noExtra.value) {
     error.value = "请勾选你的底线，或明确选择「我没有任何额外底线」。";
@@ -276,7 +100,6 @@ async function submit() {
     kind: "exclude_item" | "opt_out" | "require_count";
     candidate_ids: string[];
     category?: string;
-    attributes?: Record<string, string | number | boolean>;
     min_count?: number;
   }> = [];
   if (exclude.value.length) {
@@ -286,16 +109,10 @@ async function submit() {
     constraints.push({ kind: "opt_out", candidate_ids: optOut.value });
   }
   if (wantAlternative.value) {
-    const attributes: Record<string, string | number | boolean> = { ...legacyAttributes.value };
-    for (const cond of altAttributes.value) {
-      if (cond.state === "unknown") continue;
-      attributes[cond.key.trim()] = cond.state === "present";
-    }
     constraints.push({
       kind: "require_count",
       candidate_ids: [],
-      category: altCategory.value || undefined,
-      attributes: Object.keys(attributes).length ? attributes : undefined,
+      category: altCategory.value,
       min_count: Math.max(1, altCount.value),
     });
   }
@@ -345,57 +162,7 @@ onMounted(refresh);
       </div>
 
       <section class="panel">
-        <div class="nl-parse">
-          <label class="nl-label" for="nl-bottomline">用一句话描述你的底线（可选）</label>
-          <textarea
-            id="nl-bottomline"
-            v-model="nlText"
-            rows="3"
-            maxlength="2000"
-            placeholder="例如：有几道菜我不想吃，另外至少来一道主食。"
-          ></textarea>
-          <div class="nl-actions">
-            <button type="button" class="btn soft small" :disabled="parsing" @click="parseBottomline">
-              {{ parsing ? "解析中…" : "解析为提议" }}
-            </button>
-            <span class="hint">
-              解析只产生提议，不会写入约束；必须由你逐条确认后才提交。失败时直接使用下方手工表单。
-            </span>
-          </div>
-        </div>
-
-        <div v-if="parseFallback" class="notice amber mt12">
-          <AppIcon name="warning" :size="15" />
-          <span>
-            AI 解析未完成（{{ degradedText }}），已回退到结构化表单，请直接手工勾选。
-            这不是解析成功，也不会替你写入任何底线。
-          </span>
-        </div>
-
-        <div v-else-if="parseResult && parseResult.proposals.length" class="nl-proposals mt12">
-          <p class="hint">请逐条确认要采用的提议；未勾选的不会填入表单，填入后仍需你提交确认。</p>
-          <label
-            v-for="(proposal, index) in parseResult.proposals"
-            :key="`${proposal.kind}-${index}`"
-            class="nl-proposal"
-          >
-            <input v-model="selectedProposals[index]" type="checkbox" />
-            <span>
-              <b>{{ KIND_LABEL[proposal.kind] }}</b>
-              {{ proposal.display_text }}
-              <small v-if="proposalNames(proposal)"> · {{ proposalNames(proposal) }}</small>
-            </span>
-          </label>
-          <div class="nl-apply">
-            <button type="button" class="btn primary small" :disabled="applied" @click="applyProposals">
-              {{ applied ? "已填入表单" : "采用勾选的提议" }}
-            </button>
-            <span v-if="parseResult.model" class="hint">解析模型：{{ parseResult.model }}</span>
-          </div>
-          <p v-if="applyNotice" class="hint">{{ applyNotice }}</p>
-        </div>
-
-        <div class="between panel-header mt16">
+        <div class="between panel-header">
           <h2>01 · 整组必须避开</h2>
           <span class="badge outline">{{ exclude.length }} 项</span>
         </div>
@@ -415,7 +182,6 @@ onMounted(refresh);
             <span>
               {{ candidate.name }}
               <small>¥{{ yuan(candidate.cost_cents) }} · {{ candidate.category }}</small>
-              <AttributeChips :attributes="candidate.attributes" compact :max="3" />
             </span>
           </label>
         </div>
@@ -442,7 +208,6 @@ onMounted(refresh);
             <span>
               {{ candidate.name }}
               <small>¥{{ yuan(candidate.cost_cents) }} · {{ candidate.category }}</small>
-              <AttributeChips :attributes="candidate.attributes" compact :max="3" />
             </span>
           </label>
         </div>
@@ -462,9 +227,9 @@ onMounted(refresh);
         </label>
         <div v-if="wantAlternative" class="field-grid mt16">
           <div class="field">
-            <label for="alt-category">要求类别（可选）</label>
+            <label for="alt-category">要求类别</label>
             <select id="alt-category" v-model="altCategory">
-              <option value="">不限类别</option>
+              <option value="">请选择类别</option>
               <option v-for="category in categories" :key="category" :value="category">
                 {{ category }}
               </option>
@@ -475,52 +240,6 @@ onMounted(refresh);
             <input id="alt-count" v-model.number="altCount" type="number" min="1" max="30" />
             <span class="hint">例如「至少 1 项素菜」「至少 2 项户外」，只在满足条件时生效。</span>
           </div>
-        </div>
-
-        <div v-if="wantAlternative" class="alt-attrs mt16">
-          <div class="between">
-            <span class="small-label">属性条件（可选，可与类别组合）</span>
-            <button type="button" class="attr-toggle" @click="addAltAttribute">
-              <AppIcon name="plus" :size="11" />
-              添加属性条件
-            </button>
-          </div>
-          <datalist id="alt-attribute-options">
-            <option v-for="key in attributeKeys" :key="key" :value="key" />
-          </datalist>
-          <div v-for="(cond, index) in altAttributes" :key="index" class="attr-cond-row">
-            <input
-              v-model="cond.key"
-              list="alt-attribute-options"
-              maxlength="64"
-              placeholder="属性名，例如 辣 / 素食"
-              :aria-label="`第 ${index + 1} 条属性条件名`"
-            />
-            <select v-model="cond.state" :aria-label="`第 ${index + 1} 条属性条件状态`">
-              <option value="present">已知含</option>
-              <option value="absent">已知不含</option>
-              <option value="unknown">未知</option>
-            </select>
-            <button
-              type="button"
-              class="btn ghost small"
-              :aria-label="`删除第 ${index + 1} 条属性条件`"
-              @click="removeAltAttribute(index)"
-            >
-              <AppIcon name="close" :size="13" />
-            </button>
-          </div>
-          <p v-if="!altAttributes.length" class="hint">
-            未添加属性条件时，只按类别判定；属性未知的候选不会被当作满足。
-          </p>
-          <p v-else-if="altHasUnknown" class="hint">
-            标为「未知」的条件不会提交为约束。候选属性未知时，系统会自动生成「待确认」项，
-            等发起者补充属性事实后再判定，未知不会被算作满足或折算成不含。
-          </p>
-          <p v-if="Object.keys(legacyAttributes).length" class="hint">
-            另有一条历史属性条件无法在本界面编辑（{{ Object.keys(legacyAttributes).join("、") }}），
-            保存时会原样保留。
-          </p>
         </div>
 
         <div class="notice mt24">

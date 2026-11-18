@@ -6,42 +6,55 @@
  * 静默等待下一轮，不打断已渲染的数据。
  */
 import { onUnmounted } from "vue";
+import { requestFailureCount } from "./api";
 
 export function usePolling(
   tick: () => Promise<void> | void,
   active: () => boolean,
   intervalMs = 4000,
 ) {
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
+  let enabled = false;
+  let failures = 0;
+
+  const schedule = () => {
+    if (enabled) timer = setTimeout(() => { timer = null; void loop(); },
+      Math.min(60000, intervalMs * 2 ** Math.min(failures, 6)));
+  };
 
   const loop = async () => {
-    if (running || document.visibilityState === "hidden") return;
+    if (!enabled || running) return;
+    if (document.visibilityState === "hidden") { schedule(); return; }
     if (!active()) {
       stop();
       return;
     }
     running = true;
+    const failuresBefore = requestFailureCount;
+    let failed = false;
     try {
       await tick();
     } catch {
-      // 网络抖动等瞬态错误：保留页面现有数据，下一轮再试
+      failed = true;
     } finally {
       running = false;
     }
+    failures = failed || requestFailureCount > failuresBefore ? failures + 1 : 0;
     if (!active()) stop();
+    else schedule();
   };
 
   function start() {
-    if (timer !== null) return;
-    timer = setInterval(() => {
-      void loop();
-    }, intervalMs);
+    if (enabled) return;
+    enabled = true;
+    schedule();
   }
 
   function stop() {
+    enabled = false;
     if (timer !== null) {
-      clearInterval(timer);
+      clearTimeout(timer);
       timer = null;
     }
   }

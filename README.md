@@ -16,6 +16,8 @@
 
 本项目的做法是把偏好收集与方案求解分离：成员只在本人视角作答，系统在服务端完成约束编译与组合求解，公共视野只看到候选、推荐与整体阶段。
 
+成员治理和强制移除授权已实现，规则、接口边界与部署迁移见 [MEMBER_LIFECYCLE.md](MEMBER_LIFECYCLE.md)。
+
 ## 核心流程
 
 1. **发起**：创建协商，导入候选清单（单次 13–30 项）、预算与数量约束、整组禁选项。
@@ -49,7 +51,7 @@ backend/
     llm/           MaaS 三入口（可整体关闭）
     workers/       outbox → Redis 投影 worker
     simulation/    模拟实验：生成器、作答者、指标、网格
-    tests/         pytest 测试（134 项）
+    tests/         pytest 测试（223 项）
   alembic/         数据库迁移
   Dockerfile
 frontend/
@@ -70,9 +72,10 @@ experiments/       固定种子实验的原始结果与复现脚本
 
 ### 1. 环境
 
-- Python 3.11+（镜像使用 3.12）
-- Node 18+
-- MySQL 8 与 Redis 7（本地开发也可用 SQLite 作为临时数据库）
+- Python 3.12.14、Node 24.16.0、npm 11.x
+- MySQL 8.0.45 与 Redis 7.4.2（SQLite 仅供本地演示/测试）
+
+完整的 Windows/Linux 操作、配置、迁移、worker、超时及故障恢复说明见 [DEPLOYMENT.md](DEPLOYMENT.md)。CI 使用相同依赖锁文件运行。
 
 ### 2. 后端
 
@@ -82,7 +85,7 @@ python -m venv ../.venv
 ../.venv/Scripts/pip install -r requirements.lock.txt   # Windows
 # source ../.venv/bin/activate && pip install -r requirements.lock.txt   # macOS/Linux
 
-cp ../.env.example ../.env    # 按需修改 DATABASE_URL / REDIS_URL
+python ../scripts/configure.py  # 生成独立密钥；按需修改 DATABASE_URL / REDIS_URL
 ../.venv/Scripts/alembic upgrade head
 ../.venv/Scripts/uvicorn app.main:app --reload --port 8000
 ```
@@ -93,17 +96,15 @@ cp ../.env.example ../.env    # 按需修改 DATABASE_URL / REDIS_URL
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev     # http://127.0.0.1:5173，/api 自动代理到 :8000
 ```
 
 ### 4. 容器编排
 
 ```bash
-cd deploy
-cp .env.example .env    # 填 INVITE_TOKEN_SECRET；本地编排还要让 DATABASE_URL 与 MYSQL_PASSWORD 一致
-docker compose --profile local-db up -d --build
-bash verify.sh http://127.0.0.1
+# 在仓库根目录执行；尚未生成 .env 时先运行 python scripts/configure.py
+docker compose --env-file .env -f deploy/compose.yaml up --build -d
 ```
 
 云上（ECS + RDS + DCS）改用 `docker compose up -d --build`，不启本地 MySQL/Redis。完整步骤、验收标准与常见失败点见 [`deploy/部署说明.md`](deploy/部署说明.md)。
@@ -113,11 +114,15 @@ bash verify.sh http://127.0.0.1
 ## 测试
 
 ```bash
-cd d:/learning/ict/privnegotiate
-.venv/Scripts/python.exe -m pytest backend/app/tests -q
+# 仓库根目录，先激活本机重新创建的虚拟环境
+python -m pytest -q
+python backend/scripts/contract_snapshot.py --check
+cd frontend
+npm test
+npm run build
 ```
 
-当前基线：134 项全部通过，覆盖约束编译、n≤12 全枚举对照、偏好数值检查、权限越权、幂等与失败路径，以及公共进度接口的访问边界（`test_public_access.py`）。
+当前基线：223 项全部通过，覆盖约束编译、n≤12 全枚举对照、偏好数值检查、权限越权、幂等与失败路径，以及公共进度接口的访问边界（`test_public_access.py`）。
 
 ## 模拟实验
 
@@ -157,6 +162,8 @@ cd backend
 ## 文档
 
 - [`HANDOVER.md`](HANDOVER.md)：赛题约束、算法规格、契约、批次与红线
+- [`HARDENING.md`](HARDENING.md)：本轮 20 项改进、行为变化与验证记录
+- [`DEPLOYMENT.md`](DEPLOYMENT.md)：固定依赖、配置生成、完整部署与恢复操作
 - [`HANDOVER-2026-10-25-全量改动汇总.md`](HANDOVER-2026-10-25-全量改动汇总.md)：2026-10-25 全量改动与验证记录
 - `../ict2026/项目文档/`：技术设计（唯一真源）、分工与协作、参赛总体规划（不在本仓库）
 

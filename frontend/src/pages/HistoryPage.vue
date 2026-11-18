@@ -4,19 +4,14 @@ import { useRoute } from "vue-router";
 import AppIcon from "../components/AppIcon.vue";
 import { api, errorMessage } from "../api";
 import { shortDate, yuan } from "../format";
-import { loadSession, session } from "../session";
-import type { MyHistoryEntry, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, { history: true, personal: false });
 
-const history = ref<MyHistoryEntry[]>([]);
-const pub = ref<PublicNegotiation | null>(null);
-const loading = ref(true);
-const error = ref("");
 
-const token = computed(() => session.current?.token ?? null);
 const entries = computed(() => [...history.value].sort((a, b) => b.round_no - a.round_no));
 
 function candidateName(candidateId: string): string {
@@ -31,23 +26,8 @@ function names(ids: string[]): string[] {
 }
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [entriesData, publicView] = await Promise.all([
-      api.history(id, token.value),
-      api.publicView(id, token.value),
-    ]);
-    history.value = entriesData;
-    pub.value = publicView;
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+
 }
 
 onMounted(refresh);

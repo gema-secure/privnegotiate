@@ -3,30 +3,19 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { showConfirmDialog, showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
-import AttributeChips from "../components/AttributeChips.vue";
-import PendingAttributeChecks from "../components/PendingAttributeChecks.vue";
-import { ApiError, api, errorMessage } from "../api";
+import { api, errorMessage } from "../api";
 import { statusLabel, statusTone, yuan } from "../format";
-import { TERMINAL_STATUSES, usePolling } from "../polling";
+import { TERMINAL_STATUSES } from "../polling";
 import { detectScenario, iconForCategory, paletteFor, SCENARIO_VOICE } from "../scenario";
-import { loadSession, session } from "../session";
-import type { MyHistoryEntry, MyState, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, invited, isInitiator, canCloseRound, refresh, polling } = useNegotiationState(id, { history: true });
 
-const pub = ref<PublicNegotiation | null>(null);
-const me = ref<MyState | null>(null);
-const history = ref<MyHistoryEntry[]>([]);
-const loading = ref(true);
-const error = ref("");
 const busy = ref(false);
 const tab = ref<"recommended" | "all">("recommended");
 
-const token = computed(() => session.current?.token ?? null);
-const isInitiator = computed(() => session.current?.role === "initiator");
-const invited = computed(() => !!session.current);
 
 const recommendation = computed(() => pub.value?.recommendation ?? null);
 // 场景自适应语气：按公开的分类与候选名识别聚餐/出游/通用，标题随之切换
@@ -292,7 +281,7 @@ const nextAction = computed<NextAction | null>(() => {
     case "FINALIZED":
       return {
         title: "大家都明确接受了这份方案",
-        text: "全员针对同一版本完成确认，可以查看最终方案。",
+        text: "当前参与成员针对同一版本完成确认，可以查看最终方案。",
         label: "查看最终方案",
         to: `${base}/result`,
         icon: "check",
@@ -342,51 +331,9 @@ const pendingReasonText = computed(() => {
   }
 });
 
-const canCloseRound = computed(
-  () =>
-    isInitiator.value &&
-    !!pub.value &&
-    ["ASKING", "ANSWERING"].includes(pub.value.status),
-);
 
-async function refresh() {
-  error.value = "";
-  const memberToken = token.value;
-  if (!memberToken) {
-    pub.value = null;
-    me.value = null;
-    history.value = [];
-    error.value = "公共进度仅本协商成员可见，请使用自己的成员身份进入。";
-    loading.value = false;
-    return;
-  }
-  try {
-    const [publicState, myState, entries] = await Promise.all([
-      api.publicView(id, memberToken),
-      api.myState(id, memberToken),
-      api.history(id, memberToken),
-    ]);
-    pub.value = publicState;
-    me.value = myState;
-    history.value = entries;
-  } catch (err) {
-    // 鉴权失败清空旧数据；临时网络故障保留界面以继续轮询重试。
-    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-      pub.value = null;
-      me.value = null;
-      history.value = [];
-    }
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
-}
 
 // 活动态自动轮询：封轮计算完成、他人作答/确认后，页面无需手动刷新
-const polling = usePolling(refresh, () => {
-  const status = pub.value?.status;
-  return !!status && !TERMINAL_STATUSES.has(status);
-});
 
 async function closeRound() {
   if (!pub.value || !token.value || busy.value) return;
@@ -464,12 +411,6 @@ onMounted(() => {
         </router-link>
       </section>
 
-      <PendingAttributeChecks
-        v-if="invited && me && me.pending_attribute_checks.length"
-        :checks="me.pending_attribute_checks"
-        :candidates="pub.candidates"
-      />
-
       <div class="stage-stats">
         <div class="stage-stat hero-stat">
           <div class="v">
@@ -536,7 +477,6 @@ onMounted(() => {
             </span>
             <div class="n">{{ candidate.name }}</div>
             <div class="cat">{{ candidate.category }}</div>
-            <AttributeChips :attributes="candidate.attributes" compact :max="2" />
             <div class="p">{{ yuan(candidate.cost_cents) }}</div>
           </div>
         </div>
@@ -565,7 +505,6 @@ onMounted(() => {
       <div class="stage-chips">
         <span class="stage-chip">预算 <b>¥{{ yuan(pub.conditions.budget_cents) }}</b></span>
         <span class="stage-chip">恰选 <b>{{ pub.conditions.exact_count }} 项</b></span>
-        <span class="stage-chip">小组 <b>{{ pub.conditions.member_count }} 人</b></span>
         <span class="stage-chip">轮数上限 <b>{{ pub.conditions.round_limit }}</b></span>
         <span v-for="(limit, category) in pub.conditions.category_limits" :key="category" class="stage-chip">
           {{ category }}上限 <b>{{ limit }}</b>

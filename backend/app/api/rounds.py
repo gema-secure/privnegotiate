@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import current_member, require_negotiation
 from app.db.session import get_db
-from app.engine.closing import begin_round_close, commit_round, compute_round
+from app.engine.closing import begin_round_close, commit_round, run_round_computation
 from app.engine.confirmation import submit_confirmation
 from app.engine.state import conflict
 from app.models.business import Member, Negotiation
@@ -24,14 +24,21 @@ def close_round(
     member: Member = Depends(current_member),
     db: Session = Depends(get_db),
 ) -> CloseRoundView:
-    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True)
+    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True, populate_existing=True)
     if negotiation is None:
         require_negotiation(db, negotiation_id)
     if round_no != negotiation.round_no:
         raise conflict("ROUND_MISMATCH", "只能关闭当前轮次")
 
+    if negotiation.status == "CHECKING_FEASIBILITY":
+        from app.engine.feasibility import start_round
+        started = start_round(db, negotiation, actor_member_id=member.id)
+        return CloseRoundView(round_no=round_no, negotiation_status=started.status,
+                              outcome="retry" if started.status == "RETRY_OR_REVIEW" else "changed",
+                              message="可行性检查已恢复")
+
     snapshot = begin_round_close(db, negotiation, member)
-    computation = compute_round(snapshot)
+    computation = run_round_computation(snapshot)
     outcome = commit_round(db, snapshot, computation)
     return CloseRoundView(**outcome)
 

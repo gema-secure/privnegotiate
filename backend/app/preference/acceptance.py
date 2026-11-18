@@ -65,7 +65,10 @@ class CategoryAcceptance:
     alpha: float
     beta: float
     p_hat: float
-    var_p: float
+
+    @property
+    def var_p(self) -> float:
+        return self.alpha * self.beta / ((self.alpha + self.beta) ** 2 * (self.alpha + self.beta + 1))
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +93,6 @@ class AcceptanceState:
             alpha=alpha,
             beta=beta,
             p_hat=self.prior.p0,
-            var_p=alpha * beta / ((alpha + beta) ** 2 * (alpha + beta + 1)),
         )
 
     def p_and_variance(self, member_id: int, candidate_id: str) -> tuple[float, float]:
@@ -158,7 +160,6 @@ def rebuild_acceptance(
             alpha=alpha,
             beta=beta,
             p_hat=alpha / (alpha + beta),
-            var_p=alpha * beta / ((alpha + beta) ** 2 * (alpha + beta + 1)),
         )
 
     return AcceptanceState(

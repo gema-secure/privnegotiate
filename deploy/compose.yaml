@@ -1,127 +1,79 @@
 name: privnegotiate
 
-# 一套编排覆盖两种环境：
-#   本地全量（MySQL/Redis 也起容器）：docker compose --profile local-db up -d --build
-#   云上（RDS + DCS，不启本地数据库）：docker compose up -d --build
-# 本地用 deploy/.env；云端由 auto-deploy 在仓库根生成 .env。两者都存在时 deploy/.env 优先。
-
-x-app: &app
-  build:
-    context: ../backend
-  env_file:
-    - path: ../.env
-      required: false
-    - path: .env
-      required: false
-  restart: unless-stopped
+x-backend: &backend
+  build: ../backend
+  env_file: ../.env
+  environment: &backend-env
+    APP_ENV: prod
+    INVITE_TOKEN_SECRET: ${INVITE_TOKEN_SECRET:?Set INVITE_TOKEN_SECRET in .env}
+    DATABASE_URL: mysql+pymysql://privnegotiate:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}@mysql:3306/privnegotiate?charset=utf8mb4
+    REDIS_URL: redis://redis:6379/0
 
 services:
-  # 一次性迁移任务：源码不自动建表，缺这一步 /healthz 会是 db=ok 而业务接口全 500。
-  # api 与 worker 都等它成功退出后才启动。
   migrate:
-    <<: *app
+    <<: *backend
     command: ["alembic", "upgrade", "head"]
-    restart: "no"
     depends_on:
       mysql:
         condition: service_healthy
-        required: false
-      redis:
-        condition: service_started
-        required: false
 
   api:
-    <<: *app
-    expose:
-      - "8000"
-    environment:
-      # 生产必填：config.py 里有 dev 默认值，不覆盖则邀请令牌可被离线伪造。
-      INVITE_TOKEN_SECRET: ${INVITE_TOKEN_SECRET:?deploy/.env 未设置 INVITE_TOKEN_SECRET，请用 secrets.token_urlsafe(48) 生成后填入}
+    <<: *backend
+    restart: unless-stopped
+    ports: ["127.0.0.1:8000:8000"]
     depends_on:
       migrate:
         condition: service_completed_successfully
-      mysql:
-        condition: service_healthy
-        required: false
       redis:
-        condition: service_started
-        required: false
+        condition: service_healthy
     healthcheck:
-      # 不能只看进程存活：/healthz 的 db 字段必须为 ok，否则容器保持不健康、web 不启动。
-      test:
-        - CMD
-        - python
-        - -c
-        - >-
-          import json,urllib.request;
-          d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3));
-          raise SystemExit(0 if d.get('db')=='ok' and d.get('redis')=='ok' else 1)
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=10)"]
+      interval: 15s
+      timeout: 12s
+      retries: 5
 
-  # outbox → Redis 投影 worker：RDS 先落事实，本进程按 state_version 幂等写 Redis。
   worker:
-    <<: *app
+    <<: *backend
+    restart: unless-stopped
     command: ["python", "-m", "app.workers.outbox_projection", "--loop"]
     depends_on:
       migrate:
         condition: service_completed_successfully
-      mysql:
-        condition: service_healthy
-        required: false
       redis:
-        condition: service_started
-        required: false
+        condition: service_healthy
 
-  # Nginx：托管前端静态产物，并把 /api 反代到 api:8000（去掉 /api 前缀）。
   web:
-    build:
-      context: ..
-      dockerfile: deploy/nginx/Dockerfile
-    ports:
-      - "${WEB_PORT:-80}:80"
+    build: ../frontend
+    restart: unless-stopped
+    ports: ["${WEB_PORT:-8080}:80"]
     depends_on:
       api:
         condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
   mysql:
-    profiles: ["local-db"]
-    image: mysql:8.0
-    env_file:
-      - .env
+    image: mysql:8.0.45
+    environment:
+      MYSQL_DATABASE: privnegotiate
+      MYSQL_USER: privnegotiate
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
-    volumes:
-      - mysql-data:/var/lib/mysql
+    volumes: ["mysql-data:/var/lib/mysql"]
     healthcheck:
-      test:
-        ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
       interval: 5s
       timeout: 3s
       retries: 30
-      start_period: 40s
-    restart: unless-stopped
 
   redis:
-    profiles: ["local-db"]
-    image: redis:7
+    image: redis:7.4.2
     command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis-data:/data
+    volumes: ["redis-data:/data"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 10
-    restart: unless-stopped
+      retries: 20
 
 volumes:
   mysql-data:

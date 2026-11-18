@@ -3,9 +3,13 @@ import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { showToast } from "vant";
 import AppIcon from "./components/AppIcon.vue";
-import { loadSession, session } from "./session";
+import { loadSession, saveSession, session, sessionNotice } from "./session";
 
 const route = useRoute();
+
+function retrySaveIdentity() {
+  if (session.negotiationId !== null && session.current) saveSession(session.negotiationId, session.current);
+}
 
 const negotiationId = computed(() => {
   const value = Number(route.params.id);
@@ -35,6 +39,7 @@ const navItems = computed<NavItem[]>(() => {
     { key: "board", label: "协商对话", icon: "chat", to: `/n/${id}` },
     { key: "answer", label: "私下作答", icon: "edit", to: `/n/${id}/me/answer` },
     { key: "history", label: "我的选择链", icon: "clock", to: `/n/${id}/me/history` },
+    { key: "members", label: "成员与退出", icon: "users", to: `/n/${id}/members` },
     { key: "bottomlines", label: "我的底线", icon: "shield", to: `/n/${id}/me/bottomlines` },
   ];
   if (role === "initiator") {
@@ -79,6 +84,11 @@ async function copyInvite() {
 </script>
 
 <template>
+  <div v-if="sessionNotice.message" role="alert" class="offline-banner">
+    {{ sessionNotice.message }}
+    <button v-if="session.current" type="button" class="link-btn" @click="retrySaveIdentity">重试保存</button>
+    <router-link v-if="sessionNotice.rejoinUrl" :to="sessionNotice.rejoinUrl">重新加入</router-link>
+  </div>
   <template v-if="negotiationId !== null">
     <header class="stage-top">
       <router-link to="/" class="brand" aria-label="和议，返回首页">
@@ -122,7 +132,7 @@ async function copyInvite() {
       </div>
     </header>
     <main id="main" class="stage-main" tabindex="-1">
-      <router-view />
+      <router-view :key="`${String(route.name)}-${route.params.id ?? ''}`" />
     </main>
 
     <nav class="bottom-nav" aria-label="移动端主要导航">
@@ -146,5 +156,5 @@ async function copyInvite() {
     </nav>
   </template>
 
-  <router-view v-else />
+  <router-view v-else :key="route.fullPath" />
 </template>

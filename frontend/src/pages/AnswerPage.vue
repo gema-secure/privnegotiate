@@ -3,23 +3,16 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { showToast } from "vant";
 import AppIcon from "../components/AppIcon.vue";
-import AttributeChips from "../components/AttributeChips.vue";
 import { api, errorMessage } from "../api";
 import { requestId, shortDate } from "../format";
-import { TERMINAL_STATUSES, usePolling } from "../polling";
 import { iconForCategory, paletteFor } from "../scenario";
-import { loadSession, session } from "../session";
-import type { AnswerPayload, MyHistoryEntry, MyState, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+import type { AnswerPayload } from "../types";
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, { history: true });
 
-const me = ref<MyState | null>(null);
-const pub = ref<PublicNegotiation | null>(null);
-const history = ref<MyHistoryEntry[]>([]);
-const loading = ref(true);
-const error = ref("");
 const submitting = ref(false);
 
 const accepted = ref<string[]>([]);
@@ -28,7 +21,6 @@ const mode = ref<"explicit" | "none" | "skip">("explicit");
 const reason = ref("");
 let pendingRequestId = "";
 
-const token = computed(() => session.current?.token ?? null);
 const batch = computed(() => me.value?.question_batch ?? null);
 const currentEntry = computed(() =>
   history.value.find((entry) => entry.round_no === me.value?.round_no),
@@ -49,45 +41,6 @@ const topName = computed(() => {
   const topId = currentEntry.value?.answer?.top_id;
   return topId ? candidateName(topId) : "";
 });
-
-/* ---------- 追问措辞来源（只影响表达，不改变题目与候选） ---------- */
-const wordingMode = ref<"auto" | "template">("auto");
-const wordingSwitching = ref(false);
-
-const WORDING_REASON: Record<string, string> = {
-  llm_disabled: "AI 文本能力未启用",
-  llm_unavailable: "AI 服务暂时不可用",
-  llm_bad_output: "AI 输出不合规",
-  empty_input: "输入为空",
-  no_valid_proposals: "没有可用措辞",
-};
-
-const wordingLabel = computed(() => {
-  const source = batch.value?.wording_source;
-  if (source === "llm") return "AI 措辞";
-  if (batch.value?.wording_degraded) return "模板措辞 · AI 不可用";
-  if (source === "template") return "固定模板措辞";
-  return "模板措辞";
-});
-
-const wordingReasonText = computed(() => {
-  const reason = batch.value?.wording_degraded_reason;
-  return reason ? WORDING_REASON[reason] ?? reason : "";
-});
-
-async function useTemplateWording() {
-  if (!token.value || wordingMode.value === "template" || wordingSwitching.value) return;
-  wordingSwitching.value = true;
-  try {
-    me.value = await api.myState(id, token.value, "template");
-    wordingMode.value = "template";
-    showToast("已改用固定模板措辞");
-  } catch (err) {
-    showToast(errorMessage(err));
-  } finally {
-    wordingSwitching.value = false;
-  }
-}
 
 // 分镜流状态：storyIndex 跟随横滑位置
 const storyIndex = ref(0);
@@ -140,25 +93,8 @@ function goToSummary() {
 }
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [myState, entries, publicView] = await Promise.all([
-      api.myState(id, token.value, wordingMode.value),
-      api.history(id, token.value),
-      api.publicView(id, token.value),
-    ]);
-    me.value = myState;
-    history.value = entries;
-    pub.value = publicView;
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+
 }
 
 async function submit() {
@@ -201,10 +137,6 @@ async function submit() {
 }
 
 // 等待本轮被发起者关闭、新题目下发时自动更新
-const polling = usePolling(refresh, () => {
-  const status = me.value?.status;
-  return !!status && !TERMINAL_STATUSES.has(status);
-});
 
 onMounted(() => {
   void refresh();
@@ -289,29 +221,6 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="story-prompt">
-            <p v-if="batch.prompt_text">{{ batch.prompt_text }}</p>
-            <p v-else>请针对本轮候选逐一作答；候选项与数量由服务端固定，措辞不影响题目。</p>
-            <div class="story-prompt-meta">
-              <span class="badge" :class="batch.wording_source === 'llm' ? 'green' : 'outline'">
-                {{ wordingLabel }}
-              </span>
-              <button
-                v-if="batch.wording_source === 'llm'"
-                type="button"
-                class="link-btn"
-                :disabled="wordingSwitching"
-                @click="useTemplateWording"
-              >
-                {{ wordingSwitching ? "切换中…" : "改用固定模板措辞" }}
-              </button>
-            </div>
-            <p v-if="batch.wording_degraded" class="hint">
-              AI 措辞不可用{{ wordingReasonText ? `（${wordingReasonText}）` : "" }}，已使用固定模板。
-            </p>
-            <p class="hint">措辞只影响表达；题目、候选与问题预算均由确定性逻辑决定。</p>
-          </div>
-
           <div class="story-deck" id="story-deck" @scroll.passive="storyScroll">
             <div
               v-for="item in storyItems"
@@ -333,7 +242,6 @@ onMounted(() => {
               <div class="meta">
                 <b>¥{{ (item.cost_cents / 100).toFixed(2).replace(/\.00$/, "") }}</b> · {{ item.category }}
               </div>
-              <AttributeChips :attributes="item.attributes" compact :max="3" />
               <div class="acts">
                 <button
                   type="button"

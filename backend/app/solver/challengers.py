@@ -10,7 +10,8 @@ from typing import Any, Sequence
 from app.constraints.compiler import ConstraintModel, LinearRow
 from app.constraints.validation import verify_indices
 from app.preference.bounds import UtilityBounds
-from app.solver.cpsat_adapter import solve_mean_fair
+from app.solver.cpsat_adapter import _build_base, solve_mean_fair
+from app.solver.budget import SolveBudget
 from app.solver.mean_fair import (
     SolveResult,
     SolveStatus,
@@ -150,9 +151,27 @@ def build_challengers(
     *,
     challenge_config: ChallengeConfig | None = None,
     previous_incumbent: Sequence[str] | None = None,
+    budget: SolveBudget | None = None,
 ) -> ChallengePool:
     """在同一完整可行域内构造挑战池；池不完整时如实标记。"""
     config = challenge_config or ChallengeConfig()
+    base_model = None
+    def solve(rows, target, cfg, **kwargs):
+        nonlocal base_model
+        if budget is not None:
+            remaining = budget.remaining()
+            if remaining <= 0:
+                return SolveResult(status=SolveStatus.UNKNOWN, config_version=cfg.config_version,
+                                   message="整轮计算预算已用尽")
+            cfg = replace(cfg, time_limit_seconds=min(cfg.time_limit_seconds, remaining))
+        if target is model:
+            if base_model is None:
+                base_model, _ = _build_base(model)
+            kwargs["base_model"] = base_model
+        result = solve_mean_fair(rows, target, cfg, **kwargs)
+        if budget is not None:
+            budget.consume(result.wall_time)
+        return result
     upper_rows = _aligned_upper(bounds, model)
 
     incumbent_indices = model.selection_indices(incumbent)
@@ -245,7 +264,7 @@ def build_challengers(
                 own if index == member_index else [0.0] * model.candidate_count
                 for index in range(len(mu))
             ]
-            result = solve_mean_fair(
+            result = solve(
                 member_mu,
                 model,
                 _solver_config(solver_config, config, Fraction(0)),
@@ -258,15 +277,13 @@ def build_challengers(
         if len(challengers) >= config.max_pool:
             skipped_pool_full = True
         else:
-            upper_result = solve_mean_fair(
+            upper_result = solve(
                 upper_rows,
                 model,
                 _solver_config(solver_config, config, solver_config.lam),
                 tie_break=False,
             )
             upper_status = upper_result.status.value
-            if upper_result.wall_time is not None:
-                solve_times.append(upper_result.wall_time)
             if (
                 upper_result.status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE)
                 and upper_result.best_bound is not None
@@ -295,7 +312,7 @@ def build_challengers(
             target = replace(
                 model, rows=model.rows + (_diversity_row(model, incumbent_indices, upper),)
             )
-            result = solve_mean_fair(
+            result = solve(
                 mu,
                 target,
                 _solver_config(solver_config, config, solver_config.lam),

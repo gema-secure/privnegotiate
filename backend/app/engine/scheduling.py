@@ -13,6 +13,7 @@ from app.preference.estimates import UtilityEstimate
 from app.scheduler.heuristic import QuestionPlan, SchedulerConfig, select_questions
 from app.solver.challengers import ChallengeConfig, ChallengePool, build_challengers
 from app.solver.mean_fair import SolverConfig
+from app.solver.budget import SolveBudget
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +81,7 @@ def build_scheduling(
     *,
     round_no: int,
     previous_ids: Sequence[str] | None = None,
+    budget: SolveBudget | None = None,
 ) -> SchedulingArtifacts:
     w_top = solver_config.w_top
     bounds = build_bounds(
@@ -98,6 +100,7 @@ def build_scheduling(
         solver_config,
         challenge_config=challenge_config(config),
         previous_incumbent=previous_ids,
+        budget=budget,
     )
     bound = compute_safe_bound(
         bounds,
@@ -108,6 +111,7 @@ def build_scheduling(
         upper_bound=pool.upper_bound,
         upper_status=pool.upper_status or None,
         upper_quantization_bound=pool.upper_quantization_bound,
+        budget=budget,
     )
     plan = select_questions(
         estimate,

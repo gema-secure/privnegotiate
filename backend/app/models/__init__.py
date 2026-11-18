@@ -31,6 +31,7 @@ from app.models.business import (  # noqa: E402
     QuestionBatch,
     ResultConfirmation,
     RoundResult,
+    RemovalRequest,
 )
 from app.models.events import NegotiationEvent  # noqa: E402
 from app.models.outbox import Outbox  # noqa: E402
@@ -51,4 +52,5 @@ __all__ = [
     "QuestionBatch",
     "ResultConfirmation",
     "RoundResult",
+    "RemovalRequest",
 ]

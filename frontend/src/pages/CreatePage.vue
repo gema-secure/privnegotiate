@@ -15,36 +15,18 @@ import {
   parseMenuText,
   trimByPrice,
   trimEvenlyByCategory,
-  type ParsedAttribute,
   type ParsedMenuRow,
 } from "../menuImport";
 import { listMenus, removeMenu, saveMenu, type MenuTemplate } from "../menuLibrary";
 import { presetByKey, SCENARIO_PRESETS, type ScenarioPreset } from "../scenario";
-import { getSession, saveSession } from "../session";
-import type { AttributeState } from "../types";
+import { getSession, saveSession, session } from "../session";
 
 interface DraftRow {
   key: number;
   name: string;
   cost: string;
   category: string;
-  attributes: ParsedAttribute[];
 }
-
-const ATTR_STATES: AttributeState[] = ["present", "absent", "unknown"];
-const ATTR_STATE_LABEL: Record<AttributeState, string> = {
-  present: "含",
-  absent: "不含",
-  unknown: "未知",
-};
-const ATTR_OPTION_LABEL: Record<AttributeState, string> = {
-  present: "已知含",
-  absent: "已知不含",
-  unknown: "未知（待确认）",
-};
-
-const MIN_MEMBERS = 3;
-const MAX_MEMBERS = 15;
 
 const router = useRouter();
 const route = useRoute();
@@ -57,7 +39,6 @@ const replayedFrom = ref<number | null>(null);
 const form = reactive({
   title: "",
   initiatorName: "",
-  memberCount: 3,
   budget: "",
   count: 6,
   rounds: 4,
@@ -73,6 +54,7 @@ const importNotice = ref("");
 const importing = ref(false);
 const ocrBusy = ref(false);
 const ocrModel = ref("");
+const ocrCredential = ref("");
 
 const templates = ref<MenuTemplate[]>([]);
 const templateName = ref("");
@@ -103,13 +85,7 @@ async function fillScenario(preset: ScenarioPreset) {
   nextKey = 0;
   rows.value = preset.rows.map((row) => {
     nextKey += 1;
-    return {
-      key: nextKey,
-      name: row.name,
-      cost: row.price,
-      category: row.category,
-      attributes: [],
-    };
+    return { key: nextKey, name: row.name, cost: row.price, category: row.category };
   });
   if (!form.budget) form.budget = String(preset.budgetYuan);
   form.count = preset.count;
@@ -132,7 +108,7 @@ const filledRows = computed(() =>
 function addRow() {
   if (rows.value.length >= 30) return;
   nextKey += 1;
-  rows.value.push({ key: nextKey, name: "", cost: "", category: "", attributes: [] });
+  rows.value.push({ key: nextKey, name: "", cost: "", category: "" });
 }
 
 function removeRow(key: number) {
@@ -142,7 +118,7 @@ function removeRow(key: number) {
 async function applyImported(parsed: ParsedMenuRow[]) {
   if (parsed.length > 200) {
     importError.value = `共读到 ${parsed.length} 项，单次最多处理 200 项。请先在菜单中删减后再导入。`;
-    return;
+    return false;
   }
   if (filledRows.value.length) {
     try {
@@ -152,19 +128,13 @@ async function applyImported(parsed: ParsedMenuRow[]) {
         confirmButtonText: "导入并替换",
       });
     } catch {
-      return;
+      return false;
     }
   }
   nextKey = 0;
   rows.value = parsed.map((row) => {
     nextKey += 1;
-    return {
-      key: nextKey,
-      name: row.name,
-      cost: row.price,
-      category: row.category,
-      attributes: row.attributes ?? [],
-    };
+    return { key: nextKey, name: row.name, cost: row.price, category: row.category };
   });
   importError.value = "";
   importNotice.value =
@@ -172,21 +142,28 @@ async function applyImported(parsed: ParsedMenuRow[]) {
       ? `已导入 ${parsed.length} 项，超过 ${MAX_CANDIDATES} 项上限。请用下方裁剪助手保留 ${MIN_CANDIDATES}–${MAX_CANDIDATES} 项。`
       : `已导入 ${parsed.length} 项。可直接修改，或删减到本次协商需要的范围。`;
   showToast(`已导入 ${parsed.length} 项候选`);
+  return true;
 }
 
-function finishParse(result: { rows: ParsedMenuRow[]; errors: string[] }) {
+async function finishParse(result: { rows: ParsedMenuRow[]; errors: string[] }) {
   if (result.errors.length) {
     importError.value = result.errors.slice(0, 5).join(" ");
     if (result.errors.length > 5) {
       importError.value += ` 另有 ${result.errors.length - 5} 处问题。`;
     }
-    return;
+    if (!result.rows.length) return;
+    try {
+      await showConfirmDialog({ title: "导入有效候选",
+        message: `可导入 ${result.rows.length} 项，跳过 ${result.errors.length} 处问题。${importError.value}`,
+        confirmButtonText: "仅导入有效项" });
+    } catch { return; }
   }
   if (!result.rows.length) {
     importError.value = "没有解析到可用的候选行。";
     return;
   }
-  void applyImported(result.rows);
+  const applied = await applyImported(result.rows);
+  if (applied && result.errors.length) importNotice.value += ` 已跳过 ${result.errors.length} 处问题。`;
 }
 
 async function onFileChange(event: Event) {
@@ -241,11 +218,17 @@ async function onOcrChange(event: Event) {
   }
   ocrBusy.value = true;
   try {
+    const credential = ocrCredential.value.trim() || session.current?.token;
+    if (!credential) {
+      importError.value = "截图识别需要已有成员身份或组织者提供的识别凭证；也可使用文本导入。";
+      return;
+    }
     const dataUrl = await readAsDataUrl(file);
     const base64 = dataUrl.split(",", 2)[1] ?? "";
     const result = await api.parseMenuImage(
       base64,
       file.type as "image/jpeg" | "image/png" | "image/webp",
+      credential,
     );
     ocrModel.value = result.model;
     await applyImported(
@@ -253,7 +236,6 @@ async function onOcrChange(event: Event) {
         name: item.name,
         price: item.price,
         category: item.category,
-        attributes: [],
       })),
     );
     if (result.warnings.length) {
@@ -290,13 +272,7 @@ function loadTemplate(template: MenuTemplate) {
   nextKey = 0;
   rows.value = template.rows.map((row) => {
     nextKey += 1;
-    return {
-      key: nextKey,
-      name: row.name,
-      cost: row.price,
-      category: row.category,
-      attributes: [],
-    };
+    return { key: nextKey, name: row.name, cost: row.price, category: row.category };
   });
   importError.value = "";
   importNotice.value = `已载入模板「${template.name}」，共 ${template.rows.length} 项。`;
@@ -318,51 +294,6 @@ const categoryCounts = computed(() => {
 });
 
 const overLimit = computed(() => rows.value.length > MAX_CANDIDATES);
-
-/* ---------- 三态属性录入 ---------- */
-const openAttrRow = ref<number | null>(null);
-const attrKeyInput = ref("");
-const attrStateInput = ref<AttributeState>("present");
-
-function toggleAttrEditor(rowKey: number) {
-  openAttrRow.value = openAttrRow.value === rowKey ? null : rowKey;
-  attrKeyInput.value = "";
-  attrStateInput.value = "present";
-}
-
-function addAttribute(row: DraftRow) {
-  const key = attrKeyInput.value.trim();
-  if (!key) {
-    showToast("请填写属性名，例如「辣」「素食」");
-    return;
-  }
-  if (key.length > 64) {
-    showToast("属性名最多 64 个字符");
-    return;
-  }
-  if (row.attributes.some((item) => item.key === key)) {
-    showToast(`「${row.name || "该候选"}」已有属性「${key}」`);
-    return;
-  }
-  row.attributes.push({ key, state: attrStateInput.value });
-  attrKeyInput.value = "";
-}
-
-function cycleAttribute(row: DraftRow, index: number) {
-  const current = row.attributes[index];
-  const next = ATTR_STATES[(ATTR_STATES.indexOf(current.state) + 1) % ATTR_STATES.length];
-  row.attributes[index] = { ...current, state: next };
-}
-
-function removeAttribute(row: DraftRow, index: number) {
-  row.attributes = row.attributes.filter((_, position) => position !== index);
-}
-
-function attributeCoverage(): { marked: number; total: number } {
-  const total = rows.value.length;
-  const marked = rows.value.filter((row) => row.attributes.length > 0).length;
-  return { marked, total };
-}
 
 function applyTrim(strategy: "even" | "price") {
   if (!overLimit.value) {
@@ -394,7 +325,7 @@ async function prefillFromPrevious() {
   try {
     const identity = getSession(from);
     if (!identity) {
-      importError.value = "请使用原协商的成员身份读取候选与条件。";
+      error.value = "请使用原协商的成员身份读取候选与条件。";
       return;
     }
     const pub = await api.publicView(from, identity.token);
@@ -411,15 +342,11 @@ async function prefillFromPrevious() {
         name: candidate.name,
         cost: yuan(candidate.cost_cents),
         category: candidate.category,
-        attributes: (candidate.attributes ?? []).map((attr) => ({
-          key: attr.key,
-          state: attr.state,
-        })),
       };
     });
-    importNotice.value = `已沿用「${pub.title}」的候选、属性与条件，确认无误后继续。`;
+    importNotice.value = `已沿用「${pub.title}」的候选与条件，确认无误后继续。`;
   } catch (err) {
-    importError.value = errorMessage(err);
+    error.value = errorMessage(err);
   }
 }
 
@@ -460,12 +387,6 @@ function validateStep(): string {
     if (!form.title.trim()) return "请填写这次协商的名称。";
     if (!form.initiatorName.trim() || form.initiatorName.trim().length > 32)
       return "请填写 1–32 字的发起者称呼。";
-    if (
-      !Number.isInteger(form.memberCount) ||
-      form.memberCount < MIN_MEMBERS ||
-      form.memberCount > MAX_MEMBERS
-    )
-      return `小组人数需为 ${MIN_MEMBERS}–${MAX_MEMBERS} 的整数。`;
     if (!Number.isFinite(budgetCents.value) || budgetCents.value <= 0 || budgetCents.value > 100_000_00)
       return "请填写有效的总预算（1–100000 元）。";
     if (!Number.isInteger(form.count) || form.count < 1 || form.count > 8)
@@ -484,10 +405,6 @@ function validateStep(): string {
       if (!Number.isFinite(cents) || cents <= 0) return `请检查「${row.name}」的价格。`;
       if (Math.abs(Number(row.cost) * 100 - cents) > 0.0001)
         return `「${row.name}」的价格最多保留两位小数。`;
-      const keys = row.attributes.map((item) => item.key.trim());
-      if (keys.some((key) => !key)) return `「${row.name}」存在空属性名，请补全或删除。`;
-      if (new Set(keys).size !== keys.length)
-        return `「${row.name}」的属性名有重复，请合并后再继续。`;
     }
   }
   return "";
@@ -530,18 +447,12 @@ async function submit() {
     const result = await api.createNegotiation({
       title: form.title.trim(),
       initiator_name: form.initiatorName.trim(),
-      member_count: form.memberCount,
       candidates: rows.value.map((row, index) => ({
         candidate_id: `c${String(index + 1).padStart(2, "0")}`,
         name: row.name.trim(),
         cost_cents: parseYuan(row.cost),
         category: row.category.trim() || "未分类",
         confirmed_attributes: {},
-        attributes: row.attributes.map((attr) => ({
-          key: attr.key.trim(),
-          state: attr.state,
-          source: "manual" as const,
-        })),
       })),
       budget_cents: budgetCents.value,
       exact_count: form.count,
@@ -650,18 +561,6 @@ async function copyLink() {
                   <input id="create-name" v-model="form.initiatorName" maxlength="32" placeholder="大家熟悉的称呼" />
                 </div>
                 <div class="field">
-                  <label for="create-members">小组成员人数</label>
-                  <input
-                    id="create-members"
-                    v-model.number="form.memberCount"
-                    type="number"
-                    :min="MIN_MEMBERS"
-                    :max="MAX_MEMBERS"
-                    step="1"
-                  />
-                  <span class="hint">3–15 人；低于 3 人或超过 15 人无法创建。</span>
-                </div>
-                <div class="field">
                   <label for="create-budget">总预算 / 元</label>
                   <input id="create-budget" v-model="form.budget" type="number" min="1" max="100000" step="0.01" placeholder="按本次总花费填写" />
                   <span class="hint">全组总预算，不是人均预算。</span>
@@ -710,6 +609,9 @@ async function copyLink() {
             </div>
 
             <div class="import-zone">
+              <label class="field">截图识别凭证（已有成员身份可留空）
+                <input v-model="ocrCredential" type="password" autocomplete="off" placeholder="组织者提供的识别凭证" />
+              </label>
               <div class="import-actions">
                 <button type="button" class="btn primary" :disabled="importing" @click="fileInput?.click()">
                   <AppIcon name="share" :size="16" />
@@ -759,7 +661,6 @@ async function copyLink() {
               <p class="hint mt8">
                 聚餐场景可上传外卖/团购/店内菜单截图，由视觉模型识别成候选；
                 任意场景都支持 CSV / JSON / 粘贴文本。价格单位为元，也支持 cost_cents（分）。
-                属性列可选，格式如「辣=含;素食=未知」；未填写的属性一律按未知保留，不会当作不含。
               </p>
               <p v-if="ocrModel" class="hint">识别模型：{{ ocrModel }}</p>
               <div v-if="importError" class="error-box" role="alert">{{ importError }}</div>
@@ -827,83 +728,30 @@ async function copyLink() {
               <div class="editor-head mt8">
                 <span>候选名称</span><span>价格 / 元</span><span>分类</span><span></span>
               </div>
-              <div v-for="(row, index) in rows" :key="row.key" class="editor-item">
-                <div class="editor-row">
-                  <input v-model="row.name" maxlength="120" :aria-label="`第${index + 1}个候选名称`" />
-                  <input
-                    v-model="row.cost"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    :aria-label="`第${index + 1}个候选价格`"
-                  />
-                  <input
-                    v-model="row.category"
-                    list="category-options"
-                    maxlength="64"
-                    placeholder="可留空"
-                    :aria-label="`第${index + 1}个候选分类`"
-                  />
-                  <button
-                    type="button"
-                    class="btn ghost"
-                    :aria-label="`删除第${index + 1}个候选`"
-                    @click="removeRow(row.key)"
-                  >
-                    <AppIcon name="close" :size="15" />
-                  </button>
-                </div>
-                <div class="attr-line">
-                  <button
-                    type="button"
-                    class="attr-toggle"
-                    :aria-label="`为${row.name || '该候选'}录入三态属性`"
-                    @click="toggleAttrEditor(row.key)"
-                  >
-                    <AppIcon name="plus" :size="11" />
-                    属性
-                  </button>
-                  <span
-                    v-for="(attr, attrIndex) in row.attributes"
-                    :key="attr.key"
-                    class="attr-chip editable"
-                    :class="attr.state"
-                    title="点击切换：含 → 不含 → 未知"
-                    @click="cycleAttribute(row, attrIndex)"
-                  >
-                    <b>{{ attr.key }}</b>
-                    <i>{{ ATTR_STATE_LABEL[attr.state] }}</i>
-                    <button
-                      type="button"
-                      class="attr-x"
-                      :aria-label="`删除属性 ${attr.key}`"
-                      @click.stop="removeAttribute(row, attrIndex)"
-                    >
-                      ×
-                    </button>
-                  </span>
-                  <span v-if="!row.attributes.length" class="attr-unset">
-                    未标注 · 按未知处理
-                  </span>
-                </div>
-                <div v-if="openAttrRow === row.key" class="attr-editor">
-                  <input
-                    v-model="attrKeyInput"
-                    maxlength="64"
-                    placeholder="属性名，例如 辣 / 素食 / 含花生"
-                    :aria-label="`为${row.name || '该候选'}填写属性名`"
-                    @keyup.enter="addAttribute(row)"
-                  />
-                  <select v-model="attrStateInput" :aria-label="`为${row.name || '该候选'}选择属性状态`">
-                    <option v-for="state in ATTR_STATES" :key="state" :value="state">
-                      {{ ATTR_OPTION_LABEL[state] }}
-                    </option>
-                  </select>
-                  <button type="button" class="btn soft small" @click="addAttribute(row)">
-                    添加
-                  </button>
-                  <span class="hint">未标注不等于不含，会按未知保留，等待事实确认。</span>
-                </div>
+              <div v-for="(row, index) in rows" :key="row.key" class="editor-row">
+                <input v-model="row.name" maxlength="120" :aria-label="`第${index + 1}个候选名称`" />
+                <input
+                  v-model="row.cost"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  :aria-label="`第${index + 1}个候选价格`"
+                />
+                <input
+                  v-model="row.category"
+                  list="category-options"
+                  maxlength="64"
+                  placeholder="可留空"
+                  :aria-label="`第${index + 1}个候选分类`"
+                />
+                <button
+                  type="button"
+                  class="btn ghost"
+                  :aria-label="`删除第${index + 1}个候选`"
+                  @click="removeRow(row.key)"
+                >
+                  <AppIcon name="close" :size="15" />
+                </button>
               </div>
               <datalist id="category-options">
                 <option v-for="category in categories" :key="category" :value="category" />
@@ -955,8 +803,7 @@ async function copyLink() {
             <div class="receipt-list">
               <div class="receipt-item"><span>协商名称</span><strong>{{ form.title }}</strong></div>
               <div class="receipt-item">
-                <span>发起者 / 小组成员人数</span>
-                <strong>{{ form.initiatorName }} / {{ form.memberCount }} 人</strong>
+                <span>发起者 / 人数上限</span><strong>{{ form.initiatorName }} / 最多 6 人</strong>
               </div>
               <div class="receipt-item">
                 <span>预算 / 目标数量</span>
@@ -968,15 +815,6 @@ async function copyLink() {
               <div class="receipt-item">
                 <span>候选分类</span>
                 <strong>{{ categories.length ? categories.join("、") : "未分类" }}</strong>
-              </div>
-              <div class="receipt-item">
-                <span>属性标注</span>
-                <strong>
-                  {{ attributeCoverage().marked }} / {{ attributeCoverage().total }} 个候选已标注
-                  <template v-if="attributeCoverage().marked < attributeCoverage().total">
-                    · 其余按未知
-                  </template>
-                </strong>
               </div>
             </div>
             <div class="notice mt16">

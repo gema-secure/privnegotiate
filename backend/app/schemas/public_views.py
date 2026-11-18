@@ -42,11 +42,23 @@ class PublicResultView(StrictModel):
     is_baseline: bool
 
 
+class MembershipSummary(StrictModel):
+    membership_version: int
+    frozen: bool
+    participating_count: int
+    left_count: int
+    removed_count: int
+    unconfirmed_count: int
+    has_recorded_objection: bool
+    confirmation_scope: Literal["current_participants"] = "current_participants"
+
+
 class PublicNegotiationView(StrictModel):
     negotiation_id: int
     title: str
     status: NegotiationStatus
     round_no: int
+    membership: MembershipSummary | None = None
     conditions: PublicConditionView
     candidates: list[PublicCandidateView]
     recommendation: PublicResultView | None = None

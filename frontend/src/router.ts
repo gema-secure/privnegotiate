@@ -10,6 +10,7 @@ import HistoryPage from "./pages/HistoryPage.vue";
 import ConfirmPage from "./pages/ConfirmPage.vue";
 import ConcernPage from "./pages/ConcernPage.vue";
 import ManagePage from "./pages/ManagePage.vue";
+import MembersPage from "./pages/MembersPage.vue";
 import ResultPage from "./pages/ResultPage.vue";
 
 const router = createRouter({
@@ -29,6 +30,7 @@ const router = createRouter({
     { path: "/n/:id/me/history", name: "history", component: HistoryPage },
     { path: "/n/:id/me/confirm", name: "confirm", component: ConfirmPage },
     { path: "/n/:id/me/concern", name: "concern", component: ConcernPage },
+    { path: "/n/:id/members", name: "members", component: MembersPage },
     { path: "/n/:id/manage", name: "manage", component: ManagePage },
     { path: "/n/:id/result", name: "result", component: ResultPage },
     { path: "/:pathMatch(.*)*", redirect: "/" },

@@ -1,0 +1,3508 @@
+{
+  "components": {
+    "schemas": {
+      "AlgorithmProfile": {
+        "enum": [
+          "mean_fair_v1"
+        ],
+        "title": "AlgorithmProfile",
+        "type": "string"
+      },
+      "AnswerCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptable_ids": {
+            "items": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Acceptable Ids",
+            "type": "array"
+          },
+          "evaluated_ids": {
+            "items": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Evaluated Ids",
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/AnswerMode"
+          },
+          "question_batch_id": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Question Batch Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "request_id": {
+            "maxLength": 64,
+            "minLength": 8,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "top_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Id"
+          }
+        },
+        "required": [
+          "question_batch_id",
+          "request_id",
+          "mode"
+        ],
+        "title": "AnswerCommand",
+        "type": "object"
+      },
+      "AnswerMode": {
+        "enum": [
+          "explicit",
+          "skip"
+        ],
+        "title": "AnswerMode",
+        "type": "string"
+      },
+      "CandidateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "category": {
+            "default": "unknown",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "confirmed_attributes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Confirmed Attributes",
+            "type": "object"
+          },
+          "cost_cents": {
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "title": "Cost Cents",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "name",
+          "cost_cents"
+        ],
+        "title": "CandidateInput",
+        "type": "object"
+      },
+      "CloseRoundView": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "negotiation_status": {
+            "$ref": "#/components/schemas/NegotiationStatus"
+          },
+          "outcome": {
+            "default": "changed",
+            "enum": [
+              "changed",
+              "infeasible",
+              "retry"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "result_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Version"
+          },
+          "round_no": {
+            "title": "Round No",
+            "type": "integer"
+          },
+          "solver_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Solver Status"
+          },
+          "stable_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stable Count"
+          }
+        },
+        "required": [
+          "round_no",
+          "negotiation_status"
+        ],
+        "title": "CloseRoundView",
+        "type": "object"
+      },
+      "ConfirmMemberConstraintsCommand": {
+        "additionalProperties": false,
+        "description": "全量替换本人有效底线；未提交的旧底线视为撤销。",
+        "properties": {
+          "constraints": {
+            "items": {
+              "$ref": "#/components/schemas/MemberConstraintDraft"
+            },
+            "maxItems": 50,
+            "title": "Constraints",
+            "type": "array"
+          },
+          "expected_preference_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Preference Version"
+          },
+          "no_extra_bottomline": {
+            "default": false,
+            "title": "No Extra Bottomline",
+            "type": "boolean"
+          }
+        },
+        "title": "ConfirmMemberConstraintsCommand",
+        "type": "object"
+      },
+      "ConfirmResultCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "accept": {
+            "title": "Accept",
+            "type": "boolean"
+          },
+          "decision_config_version": {
+            "minimum": 1.0,
+            "title": "Decision Config Version",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "decision_config_version",
+          "accept"
+        ],
+        "title": "ConfirmResultCommand",
+        "type": "object"
+      },
+      "CreateNegotiationCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "algorithm_profile": {
+            "$ref": "#/components/schemas/AlgorithmProfile",
+            "default": "mean_fair_v1"
+          },
+          "budget_cents": {
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "title": "Budget Cents",
+            "type": "integer"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateInput"
+            },
+            "maxItems": 30,
+            "minItems": 13,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "category_limits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Category Limits",
+            "type": "object"
+          },
+          "exact_count": {
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Exact Count",
+            "type": "integer"
+          },
+          "initiator_name": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Initiator Name",
+            "type": "string"
+          },
+          "round_limit": {
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Round Limit",
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "initiator_name",
+          "candidates",
+          "budget_cents",
+          "exact_count",
+          "round_limit"
+        ],
+        "title": "CreateNegotiationCommand",
+        "type": "object"
+      },
+      "CreatedNegotiationView": {
+        "additionalProperties": false,
+        "properties": {
+          "invite_path": {
+            "title": "Invite Path",
+            "type": "string"
+          },
+          "invite_token": {
+            "title": "Invite Token",
+            "type": "string"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "integer"
+          },
+          "member_token": {
+            "title": "Member Token",
+            "type": "string"
+          },
+          "negotiation_id": {
+            "title": "Negotiation Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "negotiation_id",
+          "member_id",
+          "member_token",
+          "invite_token",
+          "invite_path"
+        ],
+        "title": "CreatedNegotiationView",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "JoinNegotiationCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "invite_token": {
+            "maxLength": 512,
+            "minLength": 16,
+            "title": "Invite Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invite_token",
+          "display_name"
+        ],
+        "title": "JoinNegotiationCommand",
+        "type": "object"
+      },
+      "JoinedMemberView": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "integer"
+          },
+          "member_token": {
+            "title": "Member Token",
+            "type": "string"
+          },
+          "negotiation_id": {
+            "title": "Negotiation Id",
+            "type": "integer"
+          },
+          "role": {
+            "enum": [
+              "initiator",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "negotiation_id",
+          "member_id",
+          "display_name",
+          "role",
+          "member_token"
+        ],
+        "title": "JoinedMemberView",
+        "type": "object"
+      },
+      "LeaveCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledged": {
+            "const": true,
+            "title": "Acknowledged",
+            "type": "boolean"
+          },
+          "expected_membership_version": {
+            "minimum": 1.0,
+            "title": "Expected Membership Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_membership_version",
+          "acknowledged"
+        ],
+        "title": "LeaveCommand",
+        "type": "object"
+      },
+      "MemberConstraintDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Attributes",
+            "type": "object"
+          },
+          "candidate_ids": {
+            "items": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Candidate Ids",
+            "type": "array"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "constraint_id": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Constraint Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MemberConstraintKind"
+          },
+          "min_count": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Count"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "MemberConstraintDraft",
+        "type": "object"
+      },
+      "MemberConstraintKind": {
+        "enum": [
+          "exclude_item",
+          "opt_out",
+          "require_count"
+        ],
+        "title": "MemberConstraintKind",
+        "type": "string"
+      },
+      "MemberIdentityView": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "integer"
+          },
+          "role": {
+            "enum": [
+              "initiator",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "display_name",
+          "role"
+        ],
+        "title": "MemberIdentityView",
+        "type": "object"
+      },
+      "MembershipCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_membership_version": {
+            "minimum": 1.0,
+            "title": "Expected Membership Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_membership_version"
+        ],
+        "title": "MembershipCommand",
+        "type": "object"
+      },
+      "MembershipSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation_scope": {
+            "const": "current_participants",
+            "default": "current_participants",
+            "title": "Confirmation Scope",
+            "type": "string"
+          },
+          "frozen": {
+            "title": "Frozen",
+            "type": "boolean"
+          },
+          "has_recorded_objection": {
+            "title": "Has Recorded Objection",
+            "type": "boolean"
+          },
+          "left_count": {
+            "title": "Left Count",
+            "type": "integer"
+          },
+          "membership_version": {
+            "title": "Membership Version",
+            "type": "integer"
+          },
+          "participating_count": {
+            "title": "Participating Count",
+            "type": "integer"
+          },
+          "removed_count": {
+            "title": "Removed Count",
+            "type": "integer"
+          },
+          "unconfirmed_count": {
+            "title": "Unconfirmed Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "membership_version",
+          "frozen",
+          "participating_count",
+          "left_count",
+          "removed_count",
+          "unconfirmed_count",
+          "has_recorded_objection"
+        ],
+        "title": "MembershipSummary",
+        "type": "object"
+      },
+      "MembershipView": {
+        "additionalProperties": false,
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/RosterMemberView"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "membership_status": {
+            "title": "Membership Status",
+            "type": "string"
+          },
+          "membership_version": {
+            "title": "Membership Version",
+            "type": "integer"
+          },
+          "removals": {
+            "items": {
+              "$ref": "#/components/schemas/RemovalView"
+            },
+            "title": "Removals",
+            "type": "array"
+          },
+          "response_status": {
+            "title": "Response Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "membership_version",
+          "membership_status",
+          "response_status",
+          "members",
+          "removals"
+        ],
+        "title": "MembershipView",
+        "type": "object"
+      },
+      "MenuImageCommand": {
+        "properties": {
+          "image_base64": {
+            "maxLength": 8388672,
+            "minLength": 16,
+            "title": "Image Base64",
+            "type": "string"
+          },
+          "mime_type": {
+            "default": "image/jpeg",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "title": "Mime Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image_base64"
+        ],
+        "title": "MenuImageCommand",
+        "type": "object"
+      },
+      "MenuImageResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MenuItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "model"
+        ],
+        "title": "MenuImageResult",
+        "type": "object"
+      },
+      "MenuItemView": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "price",
+          "category"
+        ],
+        "title": "MenuItemView",
+        "type": "object"
+      },
+      "MyAcceptanceSummaryView": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptable_lt_k": {
+            "title": "Acceptable Lt K",
+            "type": "boolean"
+          },
+          "exact_count": {
+            "title": "Exact Count",
+            "type": "integer"
+          },
+          "explicit_acceptable_count": {
+            "title": "Explicit Acceptable Count",
+            "type": "integer"
+          },
+          "explicit_unacceptable_count": {
+            "title": "Explicit Unacceptable Count",
+            "type": "integer"
+          },
+          "unknown_count": {
+            "title": "Unknown Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "explicit_acceptable_count",
+          "explicit_unacceptable_count",
+          "unknown_count",
+          "exact_count",
+          "acceptable_lt_k"
+        ],
+        "title": "MyAcceptanceSummaryView",
+        "type": "object"
+      },
+      "MyAnswerView": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptable_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Acceptable Ids",
+            "type": "array"
+          },
+          "accepted_at": {
+            "format": "date-time",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "evaluated_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evaluated Ids",
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/AnswerMode"
+          },
+          "round_no": {
+            "title": "Round No",
+            "type": "integer"
+          },
+          "top_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Id"
+          }
+        },
+        "required": [
+          "batch_id",
+          "round_no",
+          "mode",
+          "accepted_at"
+        ],
+        "title": "MyAnswerView",
+        "type": "object"
+      },
+      "MyConcernView": {
+        "additionalProperties": false,
+        "properties": {
+          "concern_id": {
+            "title": "Concern Id",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "result_version": {
+            "title": "Result Version",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "concern_id",
+          "result_version",
+          "text",
+          "status",
+          "created_at"
+        ],
+        "title": "MyConcernView",
+        "type": "object"
+      },
+      "MyConfirmationView": {
+        "additionalProperties": false,
+        "properties": {
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "accept",
+                  "reject"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "decision_config_version": {
+            "title": "Decision Config Version",
+            "type": "integer"
+          },
+          "result_version": {
+            "title": "Result Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "result_version",
+          "decision_config_version"
+        ],
+        "title": "MyConfirmationView",
+        "type": "object"
+      },
+      "MyConstraintView": {
+        "additionalProperties": false,
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Attributes",
+            "type": "object"
+          },
+          "candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Ids",
+            "type": "array"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "confirmed_version": {
+            "title": "Confirmed Version",
+            "type": "integer"
+          },
+          "constraint_id": {
+            "title": "Constraint Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MemberConstraintKind"
+          },
+          "min_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Count"
+          }
+        },
+        "required": [
+          "constraint_id",
+          "kind",
+          "confirmed_version"
+        ],
+        "title": "MyConstraintView",
+        "type": "object"
+      },
+      "MyHistoryEntryView": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MyAnswerView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "displayed_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Displayed Ids",
+            "type": "array"
+          },
+          "explanation_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation Code"
+          },
+          "question_batch_id": {
+            "title": "Question Batch Id",
+            "type": "string"
+          },
+          "result_candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Result Candidate Ids",
+            "type": "array"
+          },
+          "result_total_cost_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Total Cost Cents"
+          },
+          "result_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Version"
+          },
+          "round_no": {
+            "title": "Round No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "round_no",
+          "question_batch_id",
+          "displayed_ids"
+        ],
+        "title": "MyHistoryEntryView",
+        "type": "object"
+      },
+      "MyQuestionBatchView": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_skip": {
+            "default": true,
+            "title": "Allow Skip",
+            "type": "boolean"
+          },
+          "deadline": {
+            "format": "date-time",
+            "title": "Deadline",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicCandidateView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "question_batch_id": {
+            "title": "Question Batch Id",
+            "type": "string"
+          },
+          "round_no": {
+            "title": "Round No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "question_batch_id",
+          "round_no",
+          "items",
+          "deadline"
+        ],
+        "title": "MyQuestionBatchView",
+        "type": "object"
+      },
+      "MyStateView": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance_summary": {
+            "$ref": "#/components/schemas/MyAcceptanceSummaryView"
+          },
+          "bottomline_status": {
+            "enum": [
+              "pending",
+              "declared",
+              "no_extra"
+            ],
+            "title": "Bottomline Status",
+            "type": "string"
+          },
+          "concerns": {
+            "items": {
+              "$ref": "#/components/schemas/MyConcernView"
+            },
+            "title": "Concerns",
+            "type": "array"
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/PublicConditionView"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MyConfirmationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "constraints": {
+            "items": {
+              "$ref": "#/components/schemas/MyConstraintView"
+            },
+            "title": "Constraints",
+            "type": "array"
+          },
+          "decision_config_version": {
+            "title": "Decision Config Version",
+            "type": "integer"
+          },
+          "member": {
+            "$ref": "#/components/schemas/MemberIdentityView"
+          },
+          "negotiation_id": {
+            "title": "Negotiation Id",
+            "type": "integer"
+          },
+          "preference_version": {
+            "title": "Preference Version",
+            "type": "integer"
+          },
+          "question_batch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MyQuestionBatchView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "round_no": {
+            "title": "Round No",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NegotiationStatus"
+          }
+        },
+        "required": [
+          "negotiation_id",
+          "member",
+          "status",
+          "round_no",
+          "conditions",
+          "decision_config_version",
+          "bottomline_status",
+          "preference_version",
+          "acceptance_summary"
+        ],
+        "title": "MyStateView",
+        "type": "object"
+      },
+      "NegotiationStatus": {
+        "enum": [
+          "CREATED",
+          "COLLECTING_BOTTOMLINE",
+          "CHECKING_FEASIBILITY",
+          "INFEASIBLE",
+          "ADJUSTING",
+          "RETRY_OR_REVIEW",
+          "ASKING",
+          "ANSWERING",
+          "CLOSING",
+          "COMPUTING",
+          "UPDATING",
+          "PRIVATE_CONFIRM",
+          "BEST_EFFORT",
+          "CONCERN_COLLECTING",
+          "FINALIZED",
+          "CLOSED_WITH_CONCERN",
+          "CLOSED_UNCONFIRMED"
+        ],
+        "title": "NegotiationStatus",
+        "type": "string"
+      },
+      "OrganizerAction": {
+        "enum": [
+          "continue",
+          "stop"
+        ],
+        "title": "OrganizerAction",
+        "type": "string"
+      },
+      "OrganizerConcernView": {
+        "additionalProperties": false,
+        "properties": {
+          "concern_id": {
+            "title": "Concern Id",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "result_version": {
+            "title": "Result Version",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "concern_id",
+          "result_version",
+          "text",
+          "status",
+          "created_at"
+        ],
+        "title": "OrganizerConcernView",
+        "type": "object"
+      },
+      "OrganizerDecisionCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/OrganizerAction"
+          },
+          "concern_id": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concern Id"
+          },
+          "extra_rounds": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Rounds"
+          },
+          "public_adjustment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicAdjustment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "OrganizerDecisionCommand",
+        "type": "object"
+      },
+      "OrganizerDecisionView": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "concern_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concern Id"
+          },
+          "negotiation_status": {
+            "$ref": "#/components/schemas/NegotiationStatus"
+          }
+        },
+        "required": [
+          "negotiation_status",
+          "action"
+        ],
+        "title": "OrganizerDecisionView",
+        "type": "object"
+      },
+      "PreferenceRevisionCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptable"
+          },
+          "candidate_id": {
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "request_id": {
+            "maxLength": 64,
+            "minLength": 8,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "candidate_id",
+          "acceptable"
+        ],
+        "title": "PreferenceRevisionCommand",
+        "type": "object"
+      },
+      "PublicAdjustment": {
+        "additionalProperties": false,
+        "properties": {
+          "budget_cents": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Cents"
+          },
+          "category_limits": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Limits"
+          },
+          "exact_count": {
+            "anyOf": [
+              {
+                "maximum": 8.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exact Count"
+          }
+        },
+        "title": "PublicAdjustment",
+        "type": "object"
+      },
+      "PublicCandidateView": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "confirmed_attributes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "title": "Confirmed Attributes",
+            "type": "object"
+          },
+          "cost_cents": {
+            "title": "Cost Cents",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "name",
+          "cost_cents",
+          "category"
+        ],
+        "title": "PublicCandidateView",
+        "type": "object"
+      },
+      "PublicConditionView": {
+        "additionalProperties": false,
+        "properties": {
+          "budget_cents": {
+            "title": "Budget Cents",
+            "type": "integer"
+          },
+          "category_limits": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Category Limits",
+            "type": "object"
+          },
+          "condition_version": {
+            "title": "Condition Version",
+            "type": "integer"
+          },
+          "exact_count": {
+            "title": "Exact Count",
+            "type": "integer"
+          },
+          "round_limit": {
+            "title": "Round Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "budget_cents",
+          "exact_count",
+          "round_limit",
+          "condition_version"
+        ],
+        "title": "PublicConditionView",
+        "type": "object"
+      },
+      "PublicNegotiationView": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/PublicCandidateView"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/PublicConditionView"
+          },
+          "membership": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MembershipSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "negotiation_id": {
+            "title": "Negotiation Id",
+            "type": "integer"
+          },
+          "pending_action": {
+            "default": "none",
+            "enum": [
+              "waiting_members",
+              "waiting_confirmation",
+              "waiting_initiator",
+              "none"
+            ],
+            "title": "Pending Action",
+            "type": "string"
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicResultView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommendation_pending_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_preference_evidence",
+                  "collecting",
+                  "computing"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Pending Reason"
+          },
+          "round_no": {
+            "title": "Round No",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NegotiationStatus"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "negotiation_id",
+          "title",
+          "status",
+          "round_no",
+          "conditions",
+          "candidates"
+        ],
+        "title": "PublicNegotiationView",
+        "type": "object"
+      },
+      "PublicResultView": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Ids",
+            "type": "array"
+          },
+          "is_baseline": {
+            "title": "Is Baseline",
+            "type": "boolean"
+          },
+          "result_version": {
+            "title": "Result Version",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "optimal",
+              "feasible",
+              "carried_over"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "total_cost_cents": {
+            "title": "Total Cost Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "result_version",
+          "candidate_ids",
+          "total_cost_cents",
+          "source",
+          "is_baseline"
+        ],
+        "title": "PublicResultView",
+        "type": "object"
+      },
+      "RemovalCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_membership_version": {
+            "minimum": 1.0,
+            "title": "Expected Membership Version",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_membership_version",
+          "reason"
+        ],
+        "title": "RemovalCommand",
+        "type": "object"
+      },
+      "RemovalView": {
+        "additionalProperties": false,
+        "properties": {
+          "can_vote": {
+            "default": false,
+            "title": "Can Vote",
+            "type": "boolean"
+          },
+          "membership_version": {
+            "title": "Membership Version",
+            "type": "integer"
+          },
+          "my_vote": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Vote"
+          },
+          "notice": {
+            "default": "移除仅取消其后续作答与个人效用，已确认的整组禁忌仍将生效",
+            "title": "Notice",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_member_id": {
+            "title": "Target Member Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id",
+          "target_member_id",
+          "membership_version",
+          "status"
+        ],
+        "title": "RemovalView",
+        "type": "object"
+      },
+      "RemovalVoteCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "approve": {
+            "title": "Approve",
+            "type": "boolean"
+          },
+          "consequences_acknowledged": {
+            "const": true,
+            "title": "Consequences Acknowledged",
+            "type": "boolean"
+          },
+          "expected_membership_version": {
+            "minimum": 1.0,
+            "title": "Expected Membership Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_membership_version",
+          "approve",
+          "consequences_acknowledged"
+        ],
+        "title": "RemovalVoteCommand",
+        "type": "object"
+      },
+      "RetainedConstraintsView": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "items": {
+              "$ref": "#/components/schemas/MyConstraintView"
+            },
+            "title": "Constraints",
+            "type": "array"
+          },
+          "membership_status": {
+            "title": "Membership Status",
+            "type": "string"
+          },
+          "preference_version": {
+            "title": "Preference Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "membership_status",
+          "preference_version",
+          "constraints"
+        ],
+        "title": "RetainedConstraintsView",
+        "type": "object"
+      },
+      "RetainedWithdrawalCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledged": {
+            "const": true,
+            "title": "Acknowledged",
+            "type": "boolean"
+          },
+          "expected_preference_version": {
+            "minimum": 1.0,
+            "title": "Expected Preference Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_preference_version",
+          "acknowledged"
+        ],
+        "title": "RetainedWithdrawalCommand",
+        "type": "object"
+      },
+      "RosterMemberView": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "member_id": {
+            "title": "Member Id",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "display_name",
+          "role"
+        ],
+        "title": "RosterMemberView",
+        "type": "object"
+      },
+      "SubmitAnswerResultView": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "duplicate": {
+            "default": false,
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/AnswerMode"
+          },
+          "negotiation_status": {
+            "$ref": "#/components/schemas/NegotiationStatus"
+          },
+          "round_no": {
+            "title": "Round No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "batch_id",
+          "round_no",
+          "mode",
+          "accepted_at",
+          "negotiation_status"
+        ],
+        "title": "SubmitAnswerResultView",
+        "type": "object"
+      },
+      "SubmitConcernCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "result_version": {
+            "minimum": 1.0,
+            "title": "Result Version",
+            "type": "integer"
+          },
+          "share_acknowledged": {
+            "const": true,
+            "title": "Share Acknowledged",
+            "type": "boolean"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_version",
+          "text",
+          "share_acknowledged"
+        ],
+        "title": "SubmitConcernCommand",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "私密协商器",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz"
+      }
+    },
+    "/menu/parse-image": {
+      "post": {
+        "operationId": "parse_image_menu_parse_image_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MenuImageCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MenuImageResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse Image",
+        "tags": [
+          "menu"
+        ]
+      }
+    },
+    "/negotiations": {
+      "post": {
+        "operationId": "create_negotiations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNegotiationCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedNegotiationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "negotiations"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me": {
+      "get": {
+        "operationId": "my_state_negotiations__negotiation_id__me_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyStateView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "My State",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/answers": {
+      "post": {
+        "operationId": "submit_negotiations__negotiation_id__me_answers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitAnswerResultView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/concerns": {
+      "post": {
+        "operationId": "create_concern_negotiations__negotiation_id__me_concerns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitConcernCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyConcernView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Concern",
+        "tags": [
+          "concerns"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/constraints": {
+      "post": {
+        "operationId": "confirm_constraints_negotiations__negotiation_id__me_constraints_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmMemberConstraintsCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyStateView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Constraints",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/history": {
+      "get": {
+        "operationId": "history_negotiations__negotiation_id__me_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MyHistoryEntryView"
+                  },
+                  "title": "Response History Negotiations  Negotiation Id  Me History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/leave": {
+      "post": {
+        "operationId": "leave_negotiations__negotiation_id__me_leave_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaveCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leave",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/membership": {
+      "get": {
+        "operationId": "membership_negotiations__negotiation_id__me_membership_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Membership",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/retained-constraints": {
+      "get": {
+        "operationId": "retained_negotiations__negotiation_id__me_retained_constraints_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainedConstraintsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retained",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/retained-constraints/{constraint_id}/withdraw": {
+      "post": {
+        "operationId": "withdraw_negotiations__negotiation_id__me_retained_constraints__constraint_id__withdraw_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "constraint_id",
+            "required": true,
+            "schema": {
+              "title": "Constraint Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetainedWithdrawalCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainedConstraintsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Withdraw",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/return": {
+      "post": {
+        "operationId": "return_to_active_negotiations__negotiation_id__me_return_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Return To Active",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/revisions": {
+      "post": {
+        "operationId": "revise_negotiations__negotiation_id__me_revisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceRevisionCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyStateView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revise",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/revoke-token": {
+      "post": {
+        "operationId": "revoke_token_negotiations__negotiation_id__me_revoke_token_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Token",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/members": {
+      "post": {
+        "operationId": "join_negotiations__negotiation_id__members_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinNegotiationCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinedMemberView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Join",
+        "tags": [
+          "negotiations"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/members/{target_id}/removal-requests": {
+      "post": {
+        "operationId": "request_removal_negotiations__negotiation_id__members__target_id__removal_requests_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemovalCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Removal",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/members/{target_id}/unresponsive": {
+      "post": {
+        "operationId": "unresponsive_negotiations__negotiation_id__members__target_id__unresponsive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unresponsive",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/organizer/concerns": {
+      "get": {
+        "operationId": "organizer_concerns_negotiations__negotiation_id__organizer_concerns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizerConcernView"
+                  },
+                  "title": "Response Organizer Concerns Negotiations  Negotiation Id  Organizer Concerns Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Organizer Concerns",
+        "tags": [
+          "concerns"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/organizer/decision": {
+      "post": {
+        "operationId": "decide_negotiations__negotiation_id__organizer_decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizerDecisionCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizerDecisionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide",
+        "tags": [
+          "concerns"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/public": {
+      "get": {
+        "operationId": "public_negotiations__negotiation_id__public_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicNegotiationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Public",
+        "tags": [
+          "negotiations"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/removal-requests/{request_id}/cancel": {
+      "post": {
+        "operationId": "cancel_removal_negotiations__negotiation_id__removal_requests__request_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Removal",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/removal-requests/{request_id}/me/authorization": {
+      "post": {
+        "operationId": "authorize_removal_negotiations__negotiation_id__removal_requests__request_id__me_authorization_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemovalVoteCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Removal",
+        "tags": [
+          "membership"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/results/{result_version}/me/confirmation": {
+      "post": {
+        "operationId": "confirm_result_negotiations__negotiation_id__results__result_version__me_confirmation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "result_version",
+            "required": true,
+            "schema": {
+              "title": "Result Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmResultCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyConfirmationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Result",
+        "tags": [
+          "rounds"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/rounds/{round_no}/close": {
+      "post": {
+        "operationId": "close_round_negotiations__negotiation_id__rounds__round_no__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "round_no",
+            "required": true,
+            "schema": {
+              "title": "Round No",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloseRoundView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Close Round",
+        "tags": [
+          "rounds"
+        ]
+      }
+    }
+  }
+}
