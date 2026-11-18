@@ -27,3 +27,4 @@ Thumbs.db
 
 # Local tooling state (IDE/agent settings)
 .arts/
+.auto-deploy/
