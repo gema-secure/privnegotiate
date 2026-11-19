@@ -92,9 +92,196 @@
         "title": "AnswerMode",
         "type": "string"
       },
+      "BottomlineParseCommand": {
+        "additionalProperties": false,
+        "description": "自然语言底线解析入参；解析结果只作提议，不写入约束。",
+        "properties": {
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "BottomlineParseCommand",
+        "type": "object"
+      },
+      "BottomlineParseView": {
+        "additionalProperties": false,
+        "description": "解析提议，必须经成员确认后才可通过 /me/constraints 写入约束。",
+        "properties": {
+          "degraded": {
+            "default": false,
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "needs_form": {
+            "title": "Needs Form",
+            "type": "boolean"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/BottomlineProposalView"
+            },
+            "title": "Proposals",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "requires_confirmation": {
+            "const": true,
+            "default": true,
+            "title": "Requires Confirmation",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "needs_form"
+        ],
+        "title": "BottomlineParseView",
+        "type": "object"
+      },
+      "BottomlineProposalView": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Ids",
+            "type": "array"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "display_text": {
+            "title": "Display Text",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "exclude_item",
+              "opt_out",
+              "require_count"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "min_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Count"
+          }
+        },
+        "required": [
+          "kind",
+          "display_text"
+        ],
+        "title": "BottomlineProposalView",
+        "type": "object"
+      },
+      "CandidateAttributeInput": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CandidateAttributeSource",
+            "default": "manual"
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "state": {
+            "$ref": "#/components/schemas/CandidateAttributeState"
+          }
+        },
+        "required": [
+          "key",
+          "state"
+        ],
+        "title": "CandidateAttributeInput",
+        "type": "object"
+      },
+      "CandidateAttributeSource": {
+        "enum": [
+          "import",
+          "manual",
+          "correction"
+        ],
+        "title": "CandidateAttributeSource",
+        "type": "string"
+      },
+      "CandidateAttributeState": {
+        "description": "菜品属性的三态事实：已知含 / 已知不含 / 未知。",
+        "enum": [
+          "present",
+          "absent",
+          "unknown"
+        ],
+        "title": "CandidateAttributeState",
+        "type": "string"
+      },
       "CandidateInput": {
         "additionalProperties": false,
         "properties": {
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateAttributeInput"
+            },
+            "title": "Attributes",
+            "type": "array"
+          },
           "candidate_id": {
             "maxLength": 32,
             "minLength": 1,
@@ -278,6 +465,23 @@
         "title": "ConfirmResultCommand",
         "type": "object"
       },
+      "CorrectConcernSummaryCommand": {
+        "additionalProperties": false,
+        "description": "发起者对 AI 辅助摘要做人工修正；原文不变。",
+        "properties": {
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "CorrectConcernSummaryCommand",
+        "type": "object"
+      },
       "CreateNegotiationCommand": {
         "additionalProperties": false,
         "properties": {
@@ -318,6 +522,12 @@
             "minLength": 1,
             "title": "Initiator Name",
             "type": "string"
+          },
+          "member_count": {
+            "default": 3,
+            "minimum": 3.0,
+            "title": "Member Count",
+            "type": "integer"
           },
           "round_limit": {
             "maximum": 20.0,
@@ -694,6 +904,38 @@
         "title": "MembershipView",
         "type": "object"
       },
+      "MenuAttributeView": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "source": {
+            "default": "import",
+            "enum": [
+              "import",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "present",
+              "absent",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "state"
+        ],
+        "title": "MenuAttributeView",
+        "type": "object"
+      },
       "MenuImageCommand": {
         "properties": {
           "image_base64": {
@@ -749,6 +991,13 @@
       },
       "MenuItemView": {
         "properties": {
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/MenuAttributeView"
+            },
+            "title": "Attributes",
+            "type": "array"
+          },
           "category": {
             "title": "Category",
             "type": "string"
@@ -888,6 +1137,32 @@
               }
             ],
             "title": "Summary"
+          },
+          "summary_degraded": {
+            "default": false,
+            "title": "Summary Degraded",
+            "type": "boolean"
+          },
+          "summary_degraded_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Degraded Reason"
+          },
+          "summary_source": {
+            "default": "none",
+            "enum": [
+              "llm",
+              "manual",
+              "none"
+            ],
+            "title": "Summary Source",
+            "type": "string"
           },
           "text": {
             "title": "Text",
@@ -1096,6 +1371,56 @@
         "title": "MyHistoryEntryView",
         "type": "object"
       },
+      "MyPendingAttributeCheckView": {
+        "additionalProperties": false,
+        "description": "只返回本人的待确认项，不暴露其他成员的约束或属性需求。",
+        "properties": {
+          "attribute_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attribute Keys",
+            "type": "array"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "confirmed_count": {
+            "title": "Confirmed Count",
+            "type": "integer"
+          },
+          "constraint_id": {
+            "title": "Constraint Id",
+            "type": "string"
+          },
+          "required_count": {
+            "title": "Required Count",
+            "type": "integer"
+          },
+          "unconfirmed_candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unconfirmed Candidate Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "constraint_id",
+          "required_count",
+          "confirmed_count"
+        ],
+        "title": "MyPendingAttributeCheckView",
+        "type": "object"
+      },
       "MyQuestionBatchView": {
         "additionalProperties": false,
         "properties": {
@@ -1116,6 +1441,11 @@
             "title": "Items",
             "type": "array"
           },
+          "prompt_text": {
+            "default": "",
+            "title": "Prompt Text",
+            "type": "string"
+          },
           "question_batch_id": {
             "title": "Question Batch Id",
             "type": "string"
@@ -1123,6 +1453,31 @@
           "round_no": {
             "title": "Round No",
             "type": "integer"
+          },
+          "wording_degraded": {
+            "default": false,
+            "title": "Wording Degraded",
+            "type": "boolean"
+          },
+          "wording_degraded_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wording Degraded Reason"
+          },
+          "wording_source": {
+            "default": "template",
+            "enum": [
+              "llm",
+              "template"
+            ],
+            "title": "Wording Source",
+            "type": "string"
           }
         },
         "required": [
@@ -1186,6 +1541,13 @@
           "negotiation_id": {
             "title": "Negotiation Id",
             "type": "integer"
+          },
+          "pending_attribute_checks": {
+            "items": {
+              "$ref": "#/components/schemas/MyPendingAttributeCheckView"
+            },
+            "title": "Pending Attribute Checks",
+            "type": "array"
           },
           "preference_version": {
             "title": "Preference Version",
@@ -1285,6 +1647,32 @@
             ],
             "title": "Summary"
           },
+          "summary_degraded": {
+            "default": false,
+            "title": "Summary Degraded",
+            "type": "boolean"
+          },
+          "summary_degraded_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Degraded Reason"
+          },
+          "summary_source": {
+            "default": "none",
+            "enum": [
+              "llm",
+              "manual",
+              "none"
+            ],
+            "title": "Summary Source",
+            "type": "string"
+          },
           "text": {
             "title": "Text",
             "type": "string"
@@ -1366,8 +1754,35 @@
             ],
             "title": "Concern Id"
           },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
           "negotiation_status": {
             "$ref": "#/components/schemas/NegotiationStatus"
+          },
+          "outcome": {
+            "default": "round_issued",
+            "enum": [
+              "round_issued",
+              "no_new_questions",
+              "infeasible",
+              "retry",
+              "stopped"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "round_issued": {
+            "default": false,
+            "title": "Round Issued",
+            "type": "boolean"
+          },
+          "round_no": {
+            "default": 0,
+            "title": "Round No",
+            "type": "integer"
           }
         },
         "required": [
@@ -1461,9 +1876,50 @@
         "title": "PublicAdjustment",
         "type": "object"
       },
+      "PublicAttributeView": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "import",
+              "manual",
+              "correction"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "present",
+              "absent",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "state",
+          "source"
+        ],
+        "title": "PublicAttributeView",
+        "type": "object"
+      },
       "PublicCandidateView": {
         "additionalProperties": false,
         "properties": {
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/PublicAttributeView"
+            },
+            "title": "Attributes",
+            "type": "array"
+          },
           "candidate_id": {
             "title": "Candidate Id",
             "type": "string"
@@ -1527,6 +1983,11 @@
           },
           "exact_count": {
             "title": "Exact Count",
+            "type": "integer"
+          },
+          "member_count": {
+            "default": 3,
+            "title": "Member Count",
             "type": "integer"
           },
           "round_limit": {
@@ -1842,6 +2303,38 @@
         "title": "RosterMemberView",
         "type": "object"
       },
+      "SetCandidateAttributesCommand": {
+        "additionalProperties": false,
+        "description": "发起者人工修正菜品属性，写入修正记录；只改事实，不改成员底线。",
+        "properties": {
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateAttributeInput"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Attributes",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "attributes"
+        ],
+        "title": "SetCandidateAttributesCommand",
+        "type": "object"
+      },
       "SubmitAnswerResultView": {
         "additionalProperties": false,
         "properties": {
@@ -2078,6 +2571,83 @@
         ]
       }
     },
+    "/negotiations/{negotiation_id}/candidates/{candidate_id}/attributes": {
+      "post": {
+        "operationId": "correct_attributes_negotiations__negotiation_id__candidates__candidate_id__attributes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCandidateAttributesCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicNegotiationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Correct Attributes",
+        "tags": [
+          "negotiations"
+        ]
+      }
+    },
     "/negotiations/{negotiation_id}/me": {
       "get": {
         "operationId": "my_state_negotiations__negotiation_id__me_get",
@@ -2089,6 +2659,20 @@
             "schema": {
               "title": "Negotiation Id",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "wording",
+            "required": false,
+            "schema": {
+              "default": "auto",
+              "enum": [
+                "auto",
+                "template"
+              ],
+              "title": "Wording",
+              "type": "string"
             }
           },
           {
@@ -2199,6 +2783,75 @@
           }
         },
         "summary": "Submit",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/me/bottomline/parse": {
+      "post": {
+        "description": "只返回提议，不写约束；成员确认后仍走 /me/constraints 落库。",
+        "operationId": "parse_bottomline_negotiations__negotiation_id__me_bottomline_parse_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BottomlineParseCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BottomlineParseView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse Bottomline",
         "tags": [
           "me"
         ]
@@ -3082,6 +3735,83 @@
           }
         },
         "summary": "Organizer Concerns",
+        "tags": [
+          "concerns"
+        ]
+      }
+    },
+    "/negotiations/{negotiation_id}/organizer/concerns/{concern_id}/summary": {
+      "patch": {
+        "operationId": "correct_summary_negotiations__negotiation_id__organizer_concerns__concern_id__summary_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "negotiation_id",
+            "required": true,
+            "schema": {
+              "title": "Negotiation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "concern_id",
+            "required": true,
+            "schema": {
+              "title": "Concern Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectConcernSummaryCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizerConcernView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Correct Summary",
         "tags": [
           "concerns"
         ]
