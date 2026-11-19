@@ -25,8 +25,8 @@ class InstanceParams:
     pair_bonus: float = 0.0
 
     def __post_init__(self) -> None:
-        if not 3 <= self.members <= 6:
-            raise ValueError("成员数必须在 3–6 之间")
+        if not 3 <= self.members <= 15:
+            raise ValueError("成员数必须在 3–15 之间")
         if not 13 <= self.candidates <= 30:
             raise ValueError("候选数必须在 13–30 之间")
         if not 1 <= self.exact_count <= min(8, self.candidates):

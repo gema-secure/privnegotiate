@@ -66,6 +66,14 @@ def frozen_grid() -> tuple[Scenario, ...]:
         for members in (3, 4, 6)
         for candidates in (13, 20, 30)
     )
+    # 产品支持 3–15 人；补齐 10–15 人规模，验证大规模下仍可收敛。
+    large_sizes = tuple(
+        Scenario(
+            f"size_d{members}_n20",
+            InstanceParams(members=members, candidates=20, exact_count=2),
+        )
+        for members in (10, 12, 15)
+    )
     conditions = (
         Scenario("cond_heterogeneous", replace(base, correlation="heterogeneous")),
         Scenario("cond_independent", replace(base, correlation="independent")),
@@ -77,7 +85,7 @@ def frozen_grid() -> tuple[Scenario, ...]:
         Scenario("cond_tight_budget", replace(base, budget_slack_cents=500)),
         Scenario("cond_pair_bonus_0_2", replace(base, pair_bonus=0.2)),
     )
-    return sizes + conditions
+    return sizes + large_sizes + conditions
 
 
 def _parse_seeds(raw: str) -> list[int]:

@@ -1,0 +1,410 @@
+{
+  "meta": {
+    "protocol": "§15.2 固定真值模拟",
+    "seeds": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006,
+      1007,
+      1008,
+      1009,
+      1010,
+      1011,
+      1012,
+      1013,
+      1014,
+      1015,
+      1016,
+      1017,
+      1018,
+      1019,
+      1020,
+      1021,
+      1022,
+      1023,
+      1024,
+      1025,
+      1026,
+      1027,
+      1028,
+      1029,
+      1030,
+      1031,
+      1032,
+      1033,
+      1034,
+      1035,
+      1036,
+      1037,
+      1038,
+      1039,
+      1040,
+      1041,
+      1042,
+      1043,
+      1044,
+      1045,
+      1046,
+      1047,
+      1048,
+      1049,
+      1050
+    ],
+    "seed_note": "正式报告使用 1001 起的 seed，早期演示用的 1–7 不参与",
+    "scenarios": [
+      "size_d10_n20",
+      "size_d12_n20",
+      "size_d15_n20"
+    ],
+    "strategies": [
+      "heuristic"
+    ],
+    "policies": [
+      "honest"
+    ],
+    "ablations": [
+      "none"
+    ],
+    "manipulation": false,
+    "solver_time_seconds": 0.25,
+    "round_limit": 4,
+    "batch_size": 4,
+    "question_budget_rule": "12 项/成员"
+  },
+  "results": [
+    {
+      "runs": 50,
+      "mean_regret": 0.009856,
+      "max_regret": 0.084222,
+      "mean_welfare": 0.489948,
+      "mean_average_utility": 0.555744,
+      "mean_worst_utility": 0.292558,
+      "stable_misjudgment_rate": 0.0,
+      "mean_questions": 119.2,
+      "violation_rate": 0.0,
+      "mean_epsilon_safe": 0.436465,
+      "mean_coverage": 0.546,
+      "stable_rate": 0.14,
+      "mean_solver_seconds": 0.0547,
+      "bound_applicability_rate": 1.0,
+      "coverage_curve": [
+        {
+          "round": 1,
+          "runs": 50,
+          "mean_coverage": 0.0,
+          "mean_epsilon_safe": 1.0
+        },
+        {
+          "round": 2,
+          "runs": 50,
+          "mean_coverage": 0.1932,
+          "mean_epsilon_safe": 0.85153
+        },
+        {
+          "round": 3,
+          "runs": 49,
+          "mean_coverage": 0.38449,
+          "mean_epsilon_safe": 0.533179
+        },
+        {
+          "round": 4,
+          "runs": 43,
+          "mean_coverage": 0.574884,
+          "mean_epsilon_safe": 0.407087
+        }
+      ],
+      "target_rate": 0.94,
+      "mean_target_questions": 75.745,
+      "median_target_questions": 80,
+      "mean_target_round": 2.83,
+      "mean_target_solver_seconds": 0.0274,
+      "brier_score": 0.247562,
+      "brier_constant_baseline": 0.241479,
+      "brier_skill_score": -0.025191,
+      "accept_rate": 0.592308,
+      "top_log_loss": 0.974869,
+      "prediction_coverage": 1.0,
+      "prediction_count": 5720,
+      "top_count": 1152,
+      "calibration_curve": [
+        {
+          "bin": 2,
+          "predicted": 0.249107,
+          "observed": 0.5,
+          "count": 56
+        },
+        {
+          "bin": 3,
+          "predicted": 0.333333,
+          "observed": 0.512605,
+          "count": 833
+        },
+        {
+          "bin": 4,
+          "predicted": 0.4,
+          "observed": 0.451613,
+          "count": 31
+        },
+        {
+          "bin": 5,
+          "predicted": 0.5,
+          "observed": 0.579566,
+          "count": 3318
+        },
+        {
+          "bin": 6,
+          "predicted": 0.664469,
+          "observed": 0.663736,
+          "count": 1365
+        },
+        {
+          "bin": 7,
+          "predicted": 0.75,
+          "observed": 0.76699,
+          "count": 103
+        },
+        {
+          "bin": 8,
+          "predicted": 0.8,
+          "observed": 0.785714,
+          "count": 14
+        }
+      ],
+      "kind": "cell",
+      "scenario": "size_d10_n20",
+      "strategy": "heuristic",
+      "policy": "honest",
+      "ablation": "none",
+      "solver_status_counts": {
+        "OPTIMAL": 50
+      },
+      "non_optimal_rate": 0.0,
+      "unmet_rate": 0.06,
+      "stable_misjudgment_given_stable": 0.0
+    },
+    {
+      "runs": 50,
+      "mean_regret": 0.010558,
+      "max_regret": 0.089386,
+      "mean_welfare": 0.469449,
+      "mean_average_utility": 0.549919,
+      "mean_worst_utility": 0.228039,
+      "stable_misjudgment_rate": 0.0,
+      "mean_questions": 143.04,
+      "violation_rate": 0.0,
+      "mean_epsilon_safe": 0.45563,
+      "mean_coverage": 0.518,
+      "stable_rate": 0.28,
+      "mean_solver_seconds": 0.0617,
+      "bound_applicability_rate": 1.0,
+      "coverage_curve": [
+        {
+          "round": 1,
+          "runs": 50,
+          "mean_coverage": 0.0,
+          "mean_epsilon_safe": 1.0
+        },
+        {
+          "round": 2,
+          "runs": 50,
+          "mean_coverage": 0.193,
+          "mean_epsilon_safe": 0.86032
+        },
+        {
+          "round": 3,
+          "runs": 49,
+          "mean_coverage": 0.384014,
+          "mean_epsilon_safe": 0.559587
+        },
+        {
+          "round": 4,
+          "runs": 36,
+          "mean_coverage": 0.576389,
+          "mean_epsilon_safe": 0.43033
+        }
+      ],
+      "target_rate": 0.94,
+      "mean_target_questions": 77.617,
+      "median_target_questions": 96,
+      "mean_target_round": 2.574,
+      "mean_target_solver_seconds": 0.0279,
+      "brier_score": 0.250813,
+      "brier_constant_baseline": 0.239877,
+      "brier_skill_score": -0.045589,
+      "accept_rate": 0.600613,
+      "top_log_loss": 0.979978,
+      "prediction_coverage": 1.0,
+      "prediction_count": 6848,
+      "top_count": 1399,
+      "calibration_curve": [
+        {
+          "bin": 2,
+          "predicted": 0.25,
+          "observed": 0.474359,
+          "count": 78
+        },
+        {
+          "bin": 3,
+          "predicted": 0.333333,
+          "observed": 0.536082,
+          "count": 873
+        },
+        {
+          "bin": 4,
+          "predicted": 0.4,
+          "observed": 0.487179,
+          "count": 39
+        },
+        {
+          "bin": 5,
+          "predicted": 0.5,
+          "observed": 0.601451,
+          "count": 3997
+        },
+        {
+          "bin": 6,
+          "predicted": 0.664474,
+          "observed": 0.631239,
+          "count": 1703
+        },
+        {
+          "bin": 7,
+          "predicted": 0.75,
+          "observed": 0.690323,
+          "count": 155
+        },
+        {
+          "bin": 8,
+          "predicted": 0.8,
+          "observed": 1.0,
+          "count": 3
+        }
+      ],
+      "kind": "cell",
+      "scenario": "size_d12_n20",
+      "strategy": "heuristic",
+      "policy": "honest",
+      "ablation": "none",
+      "solver_status_counts": {
+        "OPTIMAL": 50
+      },
+      "non_optimal_rate": 0.0,
+      "unmet_rate": 0.06,
+      "stable_misjudgment_given_stable": 0.0
+    },
+    {
+      "runs": 50,
+      "mean_regret": 0.007866,
+      "max_regret": 0.075316,
+      "mean_welfare": 0.454694,
+      "mean_average_utility": 0.533927,
+      "mean_worst_utility": 0.216993,
+      "stable_misjudgment_rate": 0.04,
+      "mean_questions": 175.2,
+      "violation_rate": 0.0,
+      "mean_epsilon_safe": 0.45459,
+      "mean_coverage": 0.495467,
+      "stable_rate": 0.34,
+      "mean_solver_seconds": 0.0652,
+      "bound_applicability_rate": 1.0,
+      "coverage_curve": [
+        {
+          "round": 1,
+          "runs": 50,
+          "mean_coverage": 0.0,
+          "mean_epsilon_safe": 1.0
+        },
+        {
+          "round": 2,
+          "runs": 50,
+          "mean_coverage": 0.192,
+          "mean_epsilon_safe": 0.87032
+        },
+        {
+          "round": 3,
+          "runs": 46,
+          "mean_coverage": 0.384058,
+          "mean_epsilon_safe": 0.548207
+        },
+        {
+          "round": 4,
+          "runs": 33,
+          "mean_coverage": 0.575758,
+          "mean_epsilon_safe": 0.3895
+        }
+      ],
+      "target_rate": 0.96,
+      "mean_target_questions": 82.5,
+      "median_target_questions": 60.0,
+      "mean_target_round": 2.333,
+      "mean_target_solver_seconds": 0.0262,
+      "brier_score": 0.247232,
+      "brier_constant_baseline": 0.239479,
+      "brier_skill_score": -0.032374,
+      "accept_rate": 0.60257,
+      "top_log_loss": 0.984555,
+      "prediction_coverage": 1.0,
+      "prediction_count": 8404,
+      "top_count": 1704,
+      "calibration_curve": [
+        {
+          "bin": 2,
+          "predicted": 0.243939,
+          "observed": 0.474747,
+          "count": 99
+        },
+        {
+          "bin": 3,
+          "predicted": 0.333333,
+          "observed": 0.510602,
+          "count": 1179
+        },
+        {
+          "bin": 4,
+          "predicted": 0.4,
+          "observed": 0.647059,
+          "count": 34
+        },
+        {
+          "bin": 5,
+          "predicted": 0.5,
+          "observed": 0.594361,
+          "count": 4859
+        },
+        {
+          "bin": 6,
+          "predicted": 0.664739,
+          "observed": 0.670588,
+          "count": 2040
+        },
+        {
+          "bin": 7,
+          "predicted": 0.75,
+          "observed": 0.709497,
+          "count": 179
+        },
+        {
+          "bin": 8,
+          "predicted": 0.8,
+          "observed": 0.714286,
+          "count": 14
+        }
+      ],
+      "kind": "cell",
+      "scenario": "size_d15_n20",
+      "strategy": "heuristic",
+      "policy": "honest",
+      "ablation": "none",
+      "solver_status_counts": {
+        "OPTIMAL": 50
+      },
+      "non_optimal_rate": 0.0,
+      "unmet_rate": 0.04,
+      "stable_misjudgment_given_stable": 0.117647
+    }
+  ],
+  "manipulation": []
+}
