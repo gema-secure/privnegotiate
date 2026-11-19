@@ -6,20 +6,14 @@ import AppIcon from "../components/AppIcon.vue";
 import AttributeChips from "../components/AttributeChips.vue";
 import { api, errorMessage } from "../api";
 import { requestId, shortDate } from "../format";
-import { TERMINAL_STATUSES, usePolling } from "../polling";
 import { iconForCategory, paletteFor } from "../scenario";
-import { loadSession, session } from "../session";
-import type { AnswerPayload, MyHistoryEntry, MyState, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+import type { AnswerPayload } from "../types";
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, { history: true });
 
-const me = ref<MyState | null>(null);
-const pub = ref<PublicNegotiation | null>(null);
-const history = ref<MyHistoryEntry[]>([]);
-const loading = ref(true);
-const error = ref("");
 const submitting = ref(false);
 
 const accepted = ref<string[]>([]);
@@ -28,7 +22,6 @@ const mode = ref<"explicit" | "none" | "skip">("explicit");
 const reason = ref("");
 let pendingRequestId = "";
 
-const token = computed(() => session.current?.token ?? null);
 const batch = computed(() => me.value?.question_batch ?? null);
 const currentEntry = computed(() =>
   history.value.find((entry) => entry.round_no === me.value?.round_no),
@@ -140,25 +133,8 @@ function goToSummary() {
 }
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [myState, entries, publicView] = await Promise.all([
-      api.myState(id, token.value, wordingMode.value),
-      api.history(id, token.value),
-      api.publicView(id, token.value),
-    ]);
-    me.value = myState;
-    history.value = entries;
-    pub.value = publicView;
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+
 }
 
 async function submit() {
@@ -201,10 +177,6 @@ async function submit() {
 }
 
 // 等待本轮被发起者关闭、新题目下发时自动更新
-const polling = usePolling(refresh, () => {
-  const status = me.value?.status;
-  return !!status && !TERMINAL_STATUSES.has(status);
-});
 
 onMounted(() => {
   void refresh();

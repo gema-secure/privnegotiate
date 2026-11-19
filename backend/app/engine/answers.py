@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.engine.events import append_event
+from app.engine.participation import require_participant
 from app.engine.state import conflict, invalid, not_found
 from app.models.business import Member, Negotiation, QuestionAnswer, QuestionBatch, utcnow
 
@@ -42,9 +43,10 @@ def submit_answer(
     db: Session, negotiation_id: int, member: Member, command
 ) -> tuple[QuestionAnswer, bool]:
     """返回 (回答, 是否幂等重放)；同轮多成员可依次成功。"""
-    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True)
+    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True, populate_existing=True)
     if negotiation is None:
         raise not_found("NEGOTIATION_NOT_FOUND", "协商不存在")
+    member = require_participant(db, negotiation, member)
     batch = db.scalars(
         select(QuestionBatch)
         .where(
@@ -68,6 +70,10 @@ def submit_answer(
         raise conflict("ANSWER_WINDOW_CLOSED", "本轮已封轮或协商已结束")
     if batch.status != "issued":
         raise conflict("BATCH_CLOSED", "该题包已关闭，请刷新获取最新题包")
+
+    from app.engine.state import utc_aware
+    if utc_aware(batch.deadline) <= utcnow():
+        raise conflict("ANSWER_DEADLINE_PASSED", "题包已过截止时间，请等待下一轮")
 
     displayed = set(batch.displayed_ids or [])
     unknown = set(command.evaluated_ids) - displayed
@@ -98,6 +104,7 @@ def submit_answer(
     )
     db.add(answer)
     batch.status = "answered"
+    member.response_status = "ACTIVE"
     if negotiation.status == "ASKING":
         negotiation.status = "ANSWERING"
     append_event(

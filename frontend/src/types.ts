@@ -73,6 +73,7 @@ export interface PublicNegotiation {
   candidates: Candidate[];
   recommendation: PublicResult | null;
   recommendation_pending_reason: "no_preference_evidence" | "collecting" | "computing" | null;
+  membership?: MembershipSummary;
   pending_action: "waiting_members" | "waiting_confirmation" | "waiting_initiator" | "none";
 }
 
@@ -277,4 +278,27 @@ export interface AnswerPayload {
   acceptable_ids: string[];
   top_id: string | null;
   reason?: string | null;
+}
+
+export interface MembershipSummary {
+  membership_version: number;
+  frozen: boolean;
+  participating_count: number;
+  left_count: number;
+  removed_count: number;
+  unconfirmed_count: number;
+  has_recorded_objection: boolean;
+  confirmation_scope: "current_participants";
+}
+export interface RemovalRequest {
+  request_id: number; target_member_id: number; membership_version: number;
+  status: string; my_vote: boolean | null; can_vote: boolean; notice: string;
+}
+export interface MembershipState {
+  membership_version: number; membership_status: string; response_status: string;
+  members: Array<{ member_id: number; display_name: string; role: MemberRole }>;
+  removals: RemovalRequest[];
+}
+export interface RetainedConstraints {
+  membership_status: string; preference_version: number; constraints: MyConstraint[];
 }

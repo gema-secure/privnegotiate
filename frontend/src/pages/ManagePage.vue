@@ -7,26 +7,21 @@ import AttributeChips from "../components/AttributeChips.vue";
 import QrCode from "../components/QrCode.vue";
 import { ApiError, api, errorMessage } from "../api";
 import { parseYuan, shortDate, statusLabel, yuan } from "../format";
-import { loadSession, session } from "../session";
+import { session } from "../session";
+import { useNegotiationState } from "../useNegotiationState";
 import type {
   AttributeState,
   Candidate,
   CandidateAttributeInput,
-  MyState,
   OrganizerConcern,
   OrganizerDecisionResult,
-  PublicNegotiation,
 } from "../types";
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, {});
 
-const pub = ref<PublicNegotiation | null>(null);
-const me = ref<MyState | null>(null);
 const concerns = ref<OrganizerConcern[]>([]);
-const loading = ref(true);
-const error = ref("");
 const busy = ref(false);
 
 const action = ref<"continue" | "stop">("continue");
@@ -40,8 +35,6 @@ const decisionNotice = ref<{
   text: string;
 } | null>(null);
 
-const token = computed(() => session.current?.token ?? null);
-const isInitiator = computed(() => session.current?.role === "initiator");
 const openConcerns = computed(() => concerns.value.filter((item) => item.status === "open"));
 const decidable = computed(
   () =>
@@ -55,7 +48,7 @@ const decidable = computed(
       "ADJUSTING",
     ].includes(pub.value.status),
 );
-const canRetry = computed(() => pub.value?.status === "RETRY_OR_REVIEW");
+const canRetry = computed(() => ["RETRY_OR_REVIEW", "CLOSING", "CHECKING_FEASIBILITY"].includes(pub.value?.status ?? ""));
 const inviteLink = computed(() => {
   const invite = session.current?.inviteToken;
   if (!invite) return "";
@@ -223,27 +216,8 @@ function initializeBudget() {
 }
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [publicView, myState] = await Promise.all([
-      api.publicView(id, token.value),
-      api.myState(id, token.value),
-    ]);
-    pub.value = publicView;
-    me.value = myState;
-    if (isInitiator.value) {
-      concerns.value = await api.organizerConcerns(id, token.value);
-    }
-    initializeBudget();
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  if (isInitiator.value && token.value && !error.value) { try { concerns.value = await api.organizerConcerns(id, token.value); } catch (err) { error.value = errorMessage(err); } } initializeBudget();
 }
 
 async function retryCompute() {
@@ -399,7 +373,7 @@ onMounted(refresh);
         <p>你可以调整公共条件、处理获准分享的顾虑。个人底线和完整回答始终归成员本人。</p>
       </div>
 
-      <section v-if="inviteLink" class="panel">
+      <section v-if="inviteLink && !pub.membership?.frozen" class="panel">
         <div class="between panel-header">
           <div>
             <h2>邀请成员</h2>

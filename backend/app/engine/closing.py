@@ -24,6 +24,7 @@ from app.engine.batches import (
     reopen_batches,
 )
 from app.engine.events import append_event
+from app.engine.participation import require_participant
 from app.engine.loading import (
     active_answers,
     answer_observations,
@@ -54,6 +55,7 @@ from app.preference.relative_choice import (
 from app.scheduler.heuristic import QuestionPlan
 from app.solver.cpsat_adapter import solve_mean_fair
 from app.solver.mean_fair import SolveResult, SolveStatus, SolverConfig
+from app.solver.budget import SolveBudget
 
 Outcome = Literal["feasible", "infeasible", "unknown", "invalid"]
 
@@ -86,6 +88,7 @@ class RoundSnapshot:
     answers: tuple
     previous: PreviousResult | None
     new_explicit_evidence: bool
+    membership_version: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +113,10 @@ class Computation:
 
 
 def solver_config(negotiation: Negotiation) -> SolverConfig:
-    config = negotiation.config_json or {}
+    return solver_config_from(negotiation.config_json or {}, negotiation.decision_config_version)
+
+
+def solver_config_from(config: Mapping[str, Any], version: int) -> SolverConfig:
     solver = config.get("solver") or {}
     return SolverConfig(
         lam=Fraction(str(config.get("lam", 0.25))),
@@ -121,7 +127,7 @@ def solver_config(negotiation: Negotiation) -> SolverConfig:
         ),
         num_search_workers=int(solver.get("num_search_workers", 1)),
         random_seed=int(solver.get("random_seed", 0)),
-        config_version=negotiation.decision_config_version,
+        config_version=version,
     )
 
 
@@ -152,21 +158,28 @@ def _previous(row: RoundResult | None) -> PreviousResult | None:
 def _new_explicit_evidence(
     db: Session, negotiation_id: int, cutoff: int
 ) -> bool:
-    rows = db.scalars(
-        select(NegotiationEvent).where(
+    return db.scalar(
+        select(NegotiationEvent.id).where(
             NegotiationEvent.negotiation_id == negotiation_id,
             NegotiationEvent.id > cutoff,
             NegotiationEvent.type == "ANSWER_SUBMITTED",
+            NegotiationEvent.payload["mode"].as_string() == "explicit",
         )
-    ).all()
-    return any((row.payload or {}).get("mode") == "explicit" for row in rows)
+        .limit(1)
+    ) is not None
 
 
 def begin_round_close(
-    db: Session, negotiation: Negotiation, actor: Member
+    db: Session, negotiation: Negotiation, actor: Member, *, commit: bool = True,
+    initial: bool = False,
 ) -> RoundSnapshot:
     """第一阶段事务：标 CLOSING、冻结截止与版本；迟到回答此后被拒绝。"""
-    if negotiation.status not in {"ASKING", "ANSWERING", "RETRY_OR_REVIEW"}:
+    negotiation = db.get(Negotiation, negotiation.id, with_for_update=True, populate_existing=True)
+    actor = require_participant(db, negotiation, actor)
+    job_status = "CHECKING_FEASIBILITY" if initial else "CLOSING"
+    event_type = "FEASIBILITY_CHECKING" if initial else "ROUND_CLOSING"
+    resuming = negotiation.status == job_status
+    if not initial and negotiation.status not in {"ASKING", "ANSWERING", "RETRY_OR_REVIEW", "CLOSING"}:
         raise conflict("ROUND_NOT_CLOSABLE", f"当前状态 {negotiation.status} 不能封轮")
 
     round_no = negotiation.round_no
@@ -175,33 +188,43 @@ def begin_round_close(
             Member.negotiation_id == negotiation.id, Member.active.is_(True)
         )
     ).all()
-    if actor.role != "initiator":
+    if any(m.bottomline_status == "pending" for m in member_rows):
+        raise conflict("BOTTOMLINE_PENDING", "参与成员底线尚未收齐，不能封轮")
+    if actor.role != "initiator" and not initial:
         if not (
             collection_complete(db, negotiation.id, round_no)
             or all_deadlines_passed(db, negotiation.id, round_no)
         ):
             raise conflict("ROUND_NOT_READY", "尚未收齐且未到截止时间，只有发起者可提前封轮")
 
-    mark_batches_closed(db, negotiation.id, round_no)
-    max_event = db.scalar(
-        select(func.max(NegotiationEvent.id)).where(
+    if resuming:
+        closing_event = db.scalars(select(NegotiationEvent).where(
+            NegotiationEvent.negotiation_id == negotiation.id,
+            NegotiationEvent.type == event_type,
+        ).order_by(NegotiationEvent.id.desc()).limit(1)).one_or_none()
+        if closing_event is None or closing_event.payload.get("round_no") != round_no:
+            raise conflict("ROUND_SNAPSHOT_MISSING", "封轮快照记录不存在")
+        max_event = closing_event.payload["input_event_cutoff"]
+        resuming = (closing_event.constraint_version == negotiation.constraint_version
+                    and closing_event.decision_config_version == negotiation.decision_config_version
+                    and closing_event.state_version == negotiation.closing_job_version)
+    if not resuming:
+        mark_batches_closed(db, negotiation.id, round_no)
+        max_event = db.scalar(select(func.max(NegotiationEvent.id)).where(
             NegotiationEvent.negotiation_id == negotiation.id
-        )
-    ) or 0
-    negotiation.status = "CLOSING"
-    append_event(
-        db,
-        negotiation,
-        "ROUND_CLOSING",
-        {"round_no": round_no, "input_event_cutoff": max_event},
-        actor_member_id=actor.id,
-    )
+        )) or 0
+        negotiation.status = job_status
+        append_event(db, negotiation, event_type,
+                     {"round_no": round_no, "input_event_cutoff": max_event},
+                     actor_member_id=actor.id)
 
     candidates = db.scalars(
         select(Candidate)
         .where(Candidate.negotiation_id == negotiation.id)
         .order_by(Candidate.public_id)
     ).all()
+    if not resuming:
+        negotiation.closing_job_version = negotiation.state_version
     constraints = db.scalars(
         select(ConstraintRow).where(
             ConstraintRow.negotiation_id == negotiation.id,
@@ -213,7 +236,7 @@ def begin_round_close(
     snapshot = RoundSnapshot(
         negotiation_id=negotiation.id,
         round_no=round_no,
-        state_version=negotiation.state_version,
+        state_version=negotiation.closing_job_version,
         constraint_version=negotiation.constraint_version,
         decision_config_version=negotiation.decision_config_version,
         input_event_cutoff=max_event,
@@ -226,16 +249,29 @@ def begin_round_close(
         constraints=constraint_dtos(constraints),
         answers=answer_observations(answers),
         previous=_previous(previous),
+        membership_version=negotiation.membership_version,
         new_explicit_evidence=_new_explicit_evidence(
             db, negotiation.id, previous.input_event_cutoff if previous else 0
         ),
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return snapshot
 
 
-def compute_round(snapshot: RoundSnapshot) -> Computation:
+def run_round_computation(snapshot: RoundSnapshot) -> Computation:
+    """Effect boundary: production calls share one monotonic deadline."""
+    from time import monotonic
+    limit = solver_config_from(snapshot.config, snapshot.decision_config_version).time_limit_seconds
+    return compute_round(snapshot, budget=SolveBudget(limit, clock=monotonic))
+
+
+def compute_round(snapshot: RoundSnapshot, *, budget: SolveBudget | None = None) -> Computation:
     """纯计算：只读快照，不访问数据库、缓存、系统时间或 LLM。"""
+    base_solver_config = solver_config_from(snapshot.config, snapshot.decision_config_version)
+    budget = budget or SolveBudget(base_solver_config.time_limit_seconds)
     try:
         model = compile_constraints(
             snapshot.constraints, snapshot.candidates, snapshot.members
@@ -293,20 +329,11 @@ def compute_round(snapshot: RoundSnapshot) -> Computation:
         for member_id, row in zip(estimate.member_ids, estimate.scale)
     }
 
-    solver_config_value = SolverConfig(
-        lam=Fraction(str(config.get("lam", 0.25))),
-        w_top=w_top,
-        quantization_scale=int((config.get("solver") or {}).get("quantization_scale", 1000)),
-        time_limit_seconds=float(
-            (config.get("solver") or {}).get(
-                "time_limit_seconds", settings.solver_time_limit_seconds
-            )
-        ),
-        num_search_workers=int((config.get("solver") or {}).get("num_search_workers", 1)),
-        random_seed=int((config.get("solver") or {}).get("random_seed", 0)),
-        config_version=snapshot.decision_config_version,
-    )
+    if budget.remaining() <= 0:
+        return Computation(outcome="unknown", solver_status="UNKNOWN", message="整轮计算预算已用尽")
+    solver_config_value = replace(base_solver_config, time_limit_seconds=budget.remaining())
     result = solve_mean_fair(mu, model, solver_config_value)
+    budget.consume(result.wall_time)
     computation = _computation_from(snapshot, model, result, scale)
     if computation.outcome != "feasible":
         return computation
@@ -320,6 +347,7 @@ def compute_round(snapshot: RoundSnapshot) -> Computation:
         snapshot.config,
         round_no=snapshot.round_no + 1,
         previous_ids=snapshot.previous.candidate_ids if snapshot.previous else None,
+        budget=budget,
     )
     return replace(
         computation,
@@ -444,14 +472,18 @@ def _audit_record(
 
 
 def commit_round(
-    db: Session, snapshot: RoundSnapshot, computation: Computation
+    db: Session, snapshot: RoundSnapshot, computation: Computation, *, commit: bool = True
 ) -> dict[str, Any]:
     """第三阶段事务：状态/版本 CAS，唯一约束保证只提交一次。"""
-    negotiation = db.get(Negotiation, snapshot.negotiation_id, with_for_update=True)
+    negotiation = db.get(Negotiation, snapshot.negotiation_id, with_for_update=True, populate_existing=True)
     if (
         negotiation is None
         or negotiation.status != "CLOSING"
-        or negotiation.state_version != snapshot.state_version
+        or negotiation.round_no != snapshot.round_no
+        or negotiation.constraint_version != snapshot.constraint_version
+        or negotiation.decision_config_version != snapshot.decision_config_version
+        or negotiation.membership_version != snapshot.membership_version
+        or negotiation.closing_job_version != snapshot.state_version
     ):
         raise conflict("ROUND_COMMIT_RACE", "封轮任务已失效，请重新读取状态")
 
@@ -463,7 +495,10 @@ def commit_round(
             "FEASIBILITY_FAILED",
             {"round_no": snapshot.round_no, "detail": computation.message},
         )
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return {
             "round_no": snapshot.round_no,
             "negotiation_status": negotiation.status,
@@ -483,7 +518,10 @@ def commit_round(
                 "detail": computation.message,
             },
         )
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return {
             "round_no": snapshot.round_no,
             "negotiation_status": negotiation.status,
@@ -591,7 +629,10 @@ def commit_round(
             "stopping_reason": stopping_reason,
         },
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return {
         "round_no": snapshot.round_no,
         "negotiation_status": negotiation.status,

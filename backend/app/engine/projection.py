@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.engine.attributes import candidate_attribute_rows
+from app.engine.constraints_service import proposer_member_id
 from app.engine.loading import (
     attribute_state_map,
     candidate_dtos,
@@ -82,7 +83,8 @@ def _candidate_view(
 
 def _has_evidence(db: Session, negotiation_id: int) -> bool:
     rows = db.scalars(
-        select(QuestionAnswer).where(
+        select(QuestionAnswer).join(Member, Member.id == QuestionAnswer.member_id).where(
+            Member.active.is_(True),
             QuestionAnswer.negotiation_id == negotiation_id,
             QuestionAnswer.mode == "explicit",
             QuestionAnswer.invalidated_at.is_(None),
@@ -103,6 +105,21 @@ def _active_result(db: Session, negotiation: Negotiation) -> RoundResult | None:
 
 
 def build_public_view(db: Session, negotiation: Negotiation) -> PublicNegotiationView:
+    from app.schemas.public_views import MembershipSummary
+    members = db.scalars(select(Member).where(Member.negotiation_id == negotiation.id)).all()
+    participants = {m.id for m in members if m.active}
+    confirmations = db.scalars(select(ResultConfirmation).where(
+        ResultConfirmation.negotiation_id == negotiation.id,
+        ResultConfirmation.result_version == negotiation.active_result_version,
+        ResultConfirmation.decision_config_version == negotiation.decision_config_version,
+    )).all() if negotiation.active_result_version is not None else []
+    confirmed = {r.member_id for r in confirmations if r.accept}
+    from app.models.events import NegotiationEvent
+    objection = db.scalar(select(NegotiationEvent.id).where(
+        NegotiationEvent.negotiation_id == negotiation.id,
+        NegotiationEvent.type == "CONFIRMATION_SUBMITTED",
+        NegotiationEvent.payload["accept"].as_boolean().is_(False),
+    ).limit(1)) is not None
     candidates = db.scalars(
         select(Candidate)
         .where(Candidate.negotiation_id == negotiation.id, Candidate.active.is_(True))
@@ -113,7 +130,9 @@ def build_public_view(db: Session, negotiation: Negotiation) -> PublicNegotiatio
     evidence = _has_evidence(db, negotiation.id)
 
     recommendation = None
-    if result is not None and result.candidate_ids:
+    if (result is not None and result.candidate_ids
+            and result.constraint_version == negotiation.constraint_version
+            and result.decision_config_version == negotiation.decision_config_version):
         recommendation = PublicResultView(
             result_version=result.result_version,
             candidate_ids=list(result.candidate_ids),
@@ -151,6 +170,15 @@ def build_public_view(db: Session, negotiation: Negotiation) -> PublicNegotiatio
         title=negotiation.title,
         status=negotiation.status,
         round_no=negotiation.round_no,
+        membership=MembershipSummary(
+            membership_version=negotiation.membership_version,
+            frozen=negotiation.membership_frozen,
+            participating_count=len(participants),
+            left_count=sum(m.membership_status == "LEFT" for m in members),
+            removed_count=sum(m.membership_status == "REMOVED" for m in members),
+            unconfirmed_count=len(participants - confirmed),
+            has_recorded_objection=objection,
+        ),
         conditions=_conditions(negotiation),
         candidates=[
             _candidate_view(row, attribute_rows.get(row.id)) for row in candidates
@@ -267,13 +295,16 @@ def build_my_view(
             ),
         )
 
-    constraints = db.scalars(
-        select(ConfirmedConstraint).where(
-            ConfirmedConstraint.negotiation_id == negotiation.id,
-            ConfirmedConstraint.owner_member_id == member.id,
-            ConfirmedConstraint.active.is_(True),
-        )
-    ).all()
+    constraints = [
+        row
+        for row in db.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == negotiation.id,
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+        if proposer_member_id(row) == member.id
+    ]
     my_constraints = [
         MyConstraintView(
             constraint_id=row.constraint_id,

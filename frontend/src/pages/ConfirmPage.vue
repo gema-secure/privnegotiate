@@ -6,22 +6,16 @@ import AppIcon from "../components/AppIcon.vue";
 import CandidateCard from "../components/CandidateCard.vue";
 import { api, errorMessage } from "../api";
 import { statusLabel, yuan } from "../format";
-import { TERMINAL_STATUSES, usePolling } from "../polling";
-import { loadSession, session } from "../session";
-import type { MyState, PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+
 
 const route = useRoute();
 const router = useRouter();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, {});
 
-const pub = ref<PublicNegotiation | null>(null);
-const me = ref<MyState | null>(null);
-const loading = ref(true);
-const error = ref("");
 const busy = ref(false);
 
-const token = computed(() => session.current?.token ?? null);
 const recommendation = computed(() => pub.value?.recommendation ?? null);
 const resultCandidates = computed(() => {
   const ids = recommendation.value?.candidate_ids ?? [];
@@ -39,23 +33,8 @@ const inConfirmWindow = computed(
 const decision = computed(() => me.value?.confirmation?.decision ?? null);
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [publicView, myState] = await Promise.all([
-      api.publicView(id, token.value),
-      api.myState(id, token.value),
-    ]);
-    pub.value = publicView;
-    me.value = myState;
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+
 }
 
 async function accept() {
@@ -120,10 +99,6 @@ async function raiseConcern() {
 }
 
 // 等待其他成员确认时自动更新（全员接受即完成）
-const polling = usePolling(refresh, () => {
-  const status = pub.value?.status;
-  return !!status && !TERMINAL_STATUSES.has(status);
-});
 
 onMounted(() => {
   void refresh();
@@ -153,7 +128,7 @@ onMounted(() => {
       <div class="page-intro">
         <span class="private-label"><AppIcon name="shield" :size="14" /> 明确表态，不默认同意</span>
         <h1>方案稳定了，想听听你的确认。</h1>
-        <p>稳定不代表同意。只有每位成员针对同一版本明确接受，才标记为全员确认。</p>
+        <p>稳定不代表同意。只有当前参与成员针对同一版本明确接受，才标记为当前参与成员已确认。</p>
       </div>
 
       <section v-if="!recommendation" class="panel empty-state">
@@ -272,8 +247,8 @@ onMounted(() => {
         <section v-if="pub.status === 'FINALIZED'" class="panel mt16">
           <div class="between">
             <div>
-              <h3>全员已确认</h3>
-              <p class="hint mt8">所有成员都接受了方案 v{{ recommendation.result_version }}。</p>
+              <h3>当前参与成员已确认</h3>
+              <p class="hint mt8">当前参与成员都接受了方案 v{{ recommendation.result_version }}。</p>
             </div>
             <router-link :to="`/n/${id}/result`" class="btn primary">查看最终方案</router-link>
           </div>

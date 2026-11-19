@@ -22,8 +22,8 @@ class UtilityConfig:
     def __post_init__(self) -> None:
         if not math.isfinite(self.w_top) or self.w_top < 0:
             raise ValueError("w_top 必须是非负有限数")
-        if self.quadrature_nodes < 3:
-            raise ValueError("求积节点数至少为 3")
+        if not 3 <= self.quadrature_nodes <= 64:
+            raise ValueError("求积节点数须在 3–64 之间")
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +36,8 @@ class UtilityEstimate:
 
 
 def _quadrature(nodes: int) -> tuple[np.ndarray, np.ndarray]:
+    if not 3 <= nodes <= 64:
+        raise ValueError("求积节点数须在 3–64 之间")
     cached = _QUADRATURE_CACHE.get(nodes)
     if cached is None:
         cached = np.polynomial.hermite.hermgauss(nodes)

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.engine.batches import mark_batches_closed, reopen_batches
 from app.engine.closing import PreviousResult, RoundSnapshot, _stable_count
 from app.models.business import (
     ConfirmedConstraint,
+    InitiatorDecision,
     Member,
     Negotiation,
     QuestionBatch,
@@ -173,80 +174,17 @@ def test_multi_member_round_idempotency_and_finalize(api):
     assert "member_token" not in public
 
 
-def test_mid_round_join_does_not_skip_current_round(api):
+def test_mid_round_join_is_frozen(api):
     client, factory = api
-    created = client.post(
-        "/negotiations",
-        json={
-            "title": "周五聚餐",
-            "initiator_name": "组长",
-            "candidates": _candidates(),
-            "budget_cents": 6000,
-            "exact_count": 2,
-            "round_limit": 3,
-        },
-    )
-    assert created.status_code == 201, created.text
-    body = created.json()
-    negotiation_id = body["negotiation_id"]
-    headers = {"a": {"Authorization": f"Bearer {body['member_token']}"}}
-    joined = client.post(
+    negotiation_id, headers = _start(client)
+    from app.engine.setup import invite_token
+    response = client.post(
         f"/negotiations/{negotiation_id}/members",
-        json={"invite_token": body["invite_token"], "display_name": "小林"},
+        json={"invite_token": invite_token(negotiation_id), "display_name": "new"},
     )
-    assert joined.status_code == 201, joined.text
-    headers["b"] = {"Authorization": f"Bearer {joined.json()['member_token']}"}
-    for key in ("a", "b"):
-        response = client.post(
-            f"/negotiations/{negotiation_id}/me/constraints",
-            json={"constraints": [], "no_extra_bottomline": True},
-            headers=headers[key],
-        )
-        assert response.status_code == 200, response.text
-
-    me = _me(client, negotiation_id, headers["a"])
-    assert me["round_no"] == 1
-    assert _answer(client, negotiation_id, headers["a"], me["question_batch"]).status_code == 200
-    decision_version = _me(client, negotiation_id, headers["b"])["decision_config_version"]
-
-    third = client.post(
-        f"/negotiations/{negotiation_id}/members",
-        json={"invite_token": body["invite_token"], "display_name": "阿岚"},
-    )
-    assert third.status_code == 201, third.text
-    headers["c"] = {"Authorization": f"Bearer {third.json()['member_token']}"}
-    assert _me(client, negotiation_id, headers["b"])["decision_config_version"] == (
-        decision_version + 1
-    )
-
-    confirmed = client.post(
-        f"/negotiations/{negotiation_id}/me/constraints",
-        json={"constraints": [], "no_extra_bottomline": True},
-        headers=headers["c"],
-    )
-    assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()["round_no"] == 1
-    assert confirmed.json()["status"] in {"ASKING", "ANSWERING"}
-
-    with factory() as session:
-        skipped = session.scalars(
-            select(QuestionBatch).where(
-                QuestionBatch.negotiation_id == negotiation_id,
-                QuestionBatch.round_no == 2,
-            )
-        ).all()
-        assert skipped == []
-
-    b_batch = _me(client, negotiation_id, headers["b"])["question_batch"]
-    assert _answer(client, negotiation_id, headers["b"], b_batch).status_code == 200
-    closed = _close(client, negotiation_id, headers["a"], 1)
-    assert closed.status_code == 200, closed.text
-    assert closed.json()["stable_count"] == 1
-
-    newcomer = _me(client, negotiation_id, headers["c"])
-    assert newcomer["round_no"] == 2
-    assert newcomer["question_batch"] is not None
-    assert newcomer["question_batch"]["round_no"] == 2
+    assert response.status_code == 409
+    assert response.json()["code"] == "MEMBERSHIP_FROZEN"
+    assert _me(client, negotiation_id, headers["a"])["round_no"] == 1
 
 
 def test_mid_round_bottomline_confirm_does_not_advance_round(api):
@@ -635,7 +573,8 @@ def test_group_exclude_is_public_and_applies_to_every_member(api):
     opt_out_rows = [row for row in rows if row.kind == "opt_out"]
     assert len(exclude_rows) == 1, "整组避开应作为一条公共约束落库"
     assert exclude_rows[0].scope == "public"
-    assert exclude_rows[0].owner_member_id is None
+    assert exclude_rows[0].owner_member_id is None, "公共整组避开不绑定数据库 owner"
+    assert exclude_rows[0].payload["_source_member_id"] == initiator.id
     assert set(exclude_rows[0].payload["candidate_ids"]) == set(group_excluded)
     assert len(opt_out_rows) == 1, "本人不参与应保持成员级约束"
     assert opt_out_rows[0].scope == "member"
@@ -716,7 +655,8 @@ def test_resubmitting_bottomline_replaces_public_group_exclude(api):
     opt_out_rows = [row for row in rows if row.kind == "opt_out"]
     assert len(exclude_rows) == 1, "公共整组避开只应保留一条 active 记录"
     assert exclude_rows[0].scope == "public"
-    assert exclude_rows[0].owner_member_id is None
+    assert exclude_rows[0].owner_member_id is None, "公共整组避开不绑定数据库 owner"
+    assert exclude_rows[0].payload["_source_member_id"] is not None, "提出者记在 payload 来源字段"
     assert len(opt_out_rows) == 1, "成员级约束也只应保留一条 active 记录"
 
     finished = client.post(
@@ -798,6 +738,17 @@ def test_continue_without_new_questions_is_explicit(api):
         negotiation = session.get(Negotiation, negotiation_id)
         assert negotiation.round_limit == 2, "没有发出新轮时不得静默增加轮数"
         assert negotiation.status == "BEST_EFFORT"
+        assert session.scalar(
+            select(func.count(InitiatorDecision.id)).where(
+                InitiatorDecision.negotiation_id == negotiation_id
+            )
+        ) == 0, "409 不得落“已继续”的决策记录"
+        assert session.scalar(
+            select(func.count(QuestionBatch.id)).where(
+                QuestionBatch.negotiation_id == negotiation_id,
+                QuestionBatch.round_no == 2,
+            )
+        ) == 0, "409 不得留下新一轮题包"
 
     adjusted = client.post(
         f"/negotiations/{negotiation_id}/organizer/decision",
@@ -832,3 +783,19 @@ def test_continue_without_new_questions_is_explicit(api):
         ).all()
         assert len(budgets) == 1
         assert budgets[0].payload["amount_cents"] == 1900
+        excludes = session.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == negotiation_id,
+                ConfirmedConstraint.kind == "exclude_item",
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+        assert len(excludes) == 1, "公共条件替换不得停用整组避开"
+        assert set(excludes[0].payload["candidate_ids"]) == set(excluded)
+        decisions = session.scalars(
+            select(InitiatorDecision).where(
+                InitiatorDecision.negotiation_id == negotiation_id
+            )
+        ).all()
+        assert len(decisions) == 1, "调整后返回结果时必须留下决策记录"
+        assert decisions[0].extra_rounds is None, "未发出新轮不得记录追加轮数"

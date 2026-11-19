@@ -105,6 +105,7 @@ def solve_mean_fair(
     config: SolverConfig,
     *,
     tie_break: bool = True,
+    base_model: cp_model.CpModel | None = None,
 ) -> SolveResult:
     """求解量化均值公平模型；返回结果必须在发布前再经 verify_selection。
 
@@ -146,7 +147,11 @@ def solve_mean_fair(
         )
 
     b = quantized_utilities(mu, config)
-    solver_model, x = _build_base(model)
+    if base_model is None:
+        solver_model, x = _build_base(model)
+    else:
+        solver_model = base_model.Clone()
+        x = [solver_model.GetBoolVarFromProtoIndex(i) for i in range(model.candidate_count)]
     solver_model.Maximize(_main_expr(solver_model, x, b, config, model.exact_count))
 
     remaining = config.time_limit_seconds

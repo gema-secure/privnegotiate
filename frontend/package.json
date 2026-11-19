@@ -3,9 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "npm@11.13.0",
+  "engines": { "node": ">=24.16.0 <25", "npm": ">=11 <12" },
   "scripts": {
     "dev": "vite",
     "typecheck": "vue-tsc --noEmit",
+    "test": "node --test tests/*.test.cjs",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --port 4173"
   },

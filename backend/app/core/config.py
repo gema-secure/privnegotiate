@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env", "../.env"),
+        env_file=(Path(__file__).resolve().parents[3] / ".env",
+                  Path(__file__).resolve().parents[2] / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -26,6 +29,12 @@ class Settings(BaseSettings):
 
     db_pool_pre_ping: bool = True
     db_pool_recycle_seconds: int = 1800
+    db_pool_size: int = Field(default=5, ge=1)
+    db_max_overflow: int = Field(default=10, ge=0)
+    db_pool_timeout_seconds: float = Field(default=5.0, gt=0)
+    db_connect_timeout_seconds: int = Field(default=5, ge=1)
+    redis_connect_timeout_seconds: float = Field(default=2.0, gt=0)
+    redis_socket_timeout_seconds: float = Field(default=5.0, gt=0)
     health_timeout_seconds: float = 0.5
 
     redis_ttl_seconds: int = 24 * 3600
@@ -42,6 +51,11 @@ class Settings(BaseSettings):
     maas_vision_model: str = "qwen2.5-vl-72b-instruct"
     maas_timeout_seconds: float = 60.0
     menu_image_max_bytes: int = 6 * 1024 * 1024
+    menu_ocr_access_token: str = ""
+    menu_ocr_requests_per_minute: int = Field(default=5, ge=1)
+    menu_ocr_global_requests_per_minute: int = Field(default=20, ge=1)
+    menu_ocr_timeout_seconds: float = Field(default=10.0, gt=0)
+    menu_ocr_max_concurrent: int = Field(default=4, ge=1, le=16)
 
     # 文本 LLM 三入口（底线解析/问题措辞/顾虑整理）。
     # 关闭或未配置时走固定模板与结构化表单，核心协商不依赖 LLM（技术设计 §12）。
@@ -55,6 +69,17 @@ class Settings(BaseSettings):
     outbox_batch_size: int = 100
     outbox_max_attempts: int = 8
     worker_loop_interval_seconds: float = 1.0
+    outbox_retry_base_seconds: float = Field(default=5.0, gt=0)
+    outbox_retry_max_seconds: float = Field(default=300.0, gt=0)
+
+    @model_validator(mode="after")
+    def validate_production_secret(self) -> "Settings":
+        if self.app_env == "prod" and (
+            self.invite_token_secret == "dev-only-invite-secret"
+            or len(self.invite_token_secret.strip()) < 32
+        ):
+            raise ValueError("prod requires a unique INVITE_TOKEN_SECRET of at least 32 characters")
+        return self
 
 
 @lru_cache

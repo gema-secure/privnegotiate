@@ -14,15 +14,16 @@ import json
 import logging
 import time
 from collections import defaultdict
+from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.cache.redis import get_client
 from app.core.config import settings
 from app.engine.projection import build_my_view, build_public_view
-from app.models.business import Member, Negotiation
+from app.models.business import Member, Negotiation, utcnow
 from app.models.outbox import Outbox
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ def project_negotiation(
     db: Session, client: Any, negotiation_id: int, *, ttl: int | None = None
 ) -> int:
     """把协商当前投影写入 Redis；缓存丢失后的重建调用同一函数。返回实际写入数。"""
-    negotiation = db.get(Negotiation, negotiation_id)
+    negotiation = db.get(Negotiation, negotiation_id, populate_existing=True)
     if negotiation is None:
         return 0
     ttl = settings.redis_ttl_seconds if ttl is None else ttl
@@ -75,14 +76,14 @@ def project_negotiation(
 
     members = db.scalars(
         select(Member).where(
-            Member.negotiation_id == negotiation_id, Member.active.is_(True)
-        )
+            Member.negotiation_id == negotiation_id
+        ).execution_options(populate_existing=True)
     ).all()
     for member in members:
-        # 后台投影不调用 LLM：固定模板即确定性结果，不标记为降级故障。
-        member_json = build_my_view(
-            db, negotiation, member, wording_mode="template"
-        ).model_dump_json()
+        member_json = (build_my_view(db, negotiation, member).model_dump_json()
+                       if member.active and not member.token_revoked
+                       else json.dumps({"membership_status": member.membership_status,
+                                        "access": "revoked" if member.token_revoked else "retained_constraints_only"}))
         if write_snapshot(
             client, member_key(negotiation_id, member.id), version, member_json, ttl
         ):
@@ -104,16 +105,18 @@ def _mark_done(db: Session, row: Outbox) -> bool:
 
 
 def _mark_failure(db: Session, row: Outbox, error: Exception) -> None:
-    attempts = row.attempts + 1
-    dead = attempts >= settings.outbox_max_attempts
+    delay = min(settings.outbox_retry_max_seconds,
+                settings.outbox_retry_base_seconds * 2 ** min(row.attempts, 20))
     db.execute(
         update(Outbox)
         .where(Outbox.id == row.id, Outbox.status == "pending")
-        .values(
-            status="failed" if dead else "pending",
-            attempts=attempts,
-            last_error=f"{type(error).__name__}: {error}"[:500],
-        )
+        # MySQL evaluates assignments left to right: inspect attempts before increment.
+        .ordered_values(
+            ("status", case((Outbox.attempts + 1 >= settings.outbox_max_attempts, "failed"), else_="pending")),
+            ("attempts", Outbox.attempts + 1),
+            ("next_retry_at", utcnow() + timedelta(seconds=delay)),
+            ("last_error", f"{type(error).__name__}: {error}"[:500]),
+        ).execution_options(synchronize_session="fetch")
     )
 
 
@@ -125,7 +128,8 @@ def _sweep_dead_letters(db: Session) -> int:
             Outbox.status == "pending",
             Outbox.attempts >= settings.outbox_max_attempts,
         )
-        .values(status="failed", last_error="max_attempts_exceeded")
+        .values(status="failed", last_error=func.coalesce(Outbox.last_error, "max_attempts_exceeded"))
+        .execution_options(synchronize_session="fetch")
     )
     return int(result.rowcount or 0)
 
@@ -134,9 +138,11 @@ def process_pending(db: Session, client: Any, *, limit: int | None = None) -> di
     """消费一批 pending outbox：按协商去重投影一次，CAS 标记完成。"""
     rows = db.scalars(
         select(Outbox)
-        .where(Outbox.status == "pending", Outbox.attempts < settings.outbox_max_attempts)
+        .where(Outbox.status == "pending", Outbox.attempts < settings.outbox_max_attempts,
+               or_(Outbox.next_retry_at.is_(None), Outbox.next_retry_at <= utcnow()))
         .order_by(Outbox.id)
         .limit(limit or settings.outbox_batch_size)
+        .with_for_update(skip_locked=True)
     ).all()
     grouped: dict[int, list[Outbox]] = defaultdict(list)
     for row in rows:
@@ -145,23 +151,22 @@ def process_pending(db: Session, client: Any, *, limit: int | None = None) -> di
     stats = {"projected": 0, "committed": 0, "failed": 0}
     for negotiation_id, group in grouped.items():
         try:
-            stats["projected"] += project_negotiation(db, client, negotiation_id)
+            # A savepoint keeps the batch's row locks until the outer commit.
+            with db.begin_nested():
+                stats["projected"] += project_negotiation(db, client, negotiation_id)
         except Exception as exc:
-            db.rollback()
             for row in group:
                 _mark_failure(db, row, exc)
-            db.commit()
             stats["failed"] += len(group)
             continue
         for row in group:
             if _mark_done(db, row):
                 stats["committed"] += 1
-        db.commit()
 
     dead = _sweep_dead_letters(db)
     if dead:
-        db.commit()
         stats["dead_lettered"] = dead
+    db.commit()
     return stats
 
 
@@ -191,10 +196,13 @@ def main() -> None:
 
     if args.loop:
         while True:
-            with SessionLocal() as db:
-                stats = process_pending(db, client)
-            if any(stats.values()):
-                logger.info("outbox projection %s", stats)
+            try:
+                with SessionLocal() as db:
+                    stats = process_pending(db, client)
+                if any(stats.values()):
+                    logger.info("outbox projection %s", stats)
+            except Exception as exc:
+                logger.error("outbox iteration failed type=%s; retrying next iteration", type(exc).__name__)
             time.sleep(settings.worker_loop_interval_seconds)
         return
 

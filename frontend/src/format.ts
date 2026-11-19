@@ -15,7 +15,7 @@ const STATUS_LABELS: Record<NegotiationStatus, string> = {
   PRIVATE_CONFIRM: "待私下确认",
   BEST_EFFORT: "尚未收敛，待确认",
   CONCERN_COLLECTING: "顾虑待处理",
-  FINALIZED: "全员已确认",
+  FINALIZED: "当前参与成员已确认",
   CLOSED_WITH_CONCERN: "已结束，保留顾虑",
   CLOSED_UNCONFIRMED: "已结束，未获全员确认",
 };
@@ -66,10 +66,4 @@ export function shortDate(iso: string): string {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function requestId(): string {
-  const raw =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random()}`;
-  return raw.replace(/[^A-Za-z0-9]/g, "").slice(0, 40);
-}
+export { requestId } from "./requestId";

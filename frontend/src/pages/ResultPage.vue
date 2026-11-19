@@ -8,16 +8,13 @@ import { api, errorMessage } from "../api";
 import { statusLabel, yuan } from "../format";
 import { detectScenario, SCENARIO_VOICE } from "../scenario";
 import { shareOrDownloadCard } from "../shareCard";
-import { getSession, loadSession } from "../session";
-import type { PublicNegotiation } from "../types";
+import { useNegotiationState } from "../useNegotiationState";
+
 
 const route = useRoute();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, history, loading, error, token, isInitiator, polling, refresh: refreshState } = useNegotiationState(id, { personal: false });
 
-const pub = ref<PublicNegotiation | null>(null);
-const loading = ref(true);
-const error = ref("");
 const fallbackText = ref("");
 
 const recommendation = computed(() => pub.value?.recommendation ?? null);
@@ -42,9 +39,9 @@ const finalState = computed(() => {
     return {
       tone: "",
       icon: "check",
-      title: "大家，都点了头。",
-      desc: "所有成员已针对同一版本明确接受。这不是系统替你们做的决定。",
-      label: "全员已确认",
+      title: "当前参与成员已确认。",
+      desc: "当前参与成员已针对同一版本明确接受，确认范围不含已离开或被移除成员。",
+      label: "当前参与成员已确认",
       badge: "green" as const,
     };
   }
@@ -80,27 +77,13 @@ const planText = computed(() => {
     recommendation.value ? `方案 v${recommendation.value.result_version}：${names}` : "方案：暂未形成",
     `总费用：${cost} / 预算 ${budget}`,
     `结果：${statusLabel(pub.value.status)}`,
+    pub.value.membership ? `确认范围：当前参与 ${pub.value.membership.participating_count} 人；离开 ${pub.value.membership.left_count} 人，移除 ${pub.value.membership.removed_count} 人，未确认 ${pub.value.membership.unconfirmed_count} 人` : "",
   ].join("\n");
 });
 
 async function refresh() {
-  error.value = "";
-  try {
-    const identity = getSession(id);
-    if (!identity) {
-      pub.value = null;
-      fallbackText.value = "";
-      error.value = "协商结果仅本协商成员可见，请使用自己的成员身份进入。";
-      return;
-    }
-    pub.value = await api.publicView(id, identity.token);
-  } catch (err) {
-    pub.value = null;
-    fallbackText.value = "";
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  if (!pub.value) fallbackText.value = "";
 }
 
 async function copyPlan() {
@@ -172,6 +155,8 @@ onMounted(refresh);
           <span class="badge" :class="finalState.badge">{{ finalState.label }}</span>
           <h1>{{ finalState.title }}</h1>
           <p>{{ finalState.desc }}</p>
+          <p v-if="pub.membership" class="hint mt16">当前参与 {{ pub.membership.participating_count }} 人 · 离开 {{ pub.membership.left_count }} 人 · 移除 {{ pub.membership.removed_count }} 人 · 未确认 {{ pub.membership.unconfirmed_count }} 人</p>
+          <p v-if="pub.membership?.has_recorded_objection" class="hint mt8">历史曾有明确异议，记录继续保留。</p>
         </div>
 
         <div v-if="recommendation" class="summary mt24">
@@ -203,7 +188,7 @@ onMounted(refresh);
             v-for="candidate in resultCandidates"
             :key="candidate.candidate_id"
             :candidate="candidate"
-            :badge="pub.status === 'FINALIZED' ? '全员确认' : '公开组合'"
+            :badge="pub.status === 'FINALIZED' ? '当前成员确认' : '公开组合'"
           />
         </div>
 

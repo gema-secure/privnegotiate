@@ -19,8 +19,18 @@ from app.models.business import (
 PUBLIC_BUDGET_ID = "pub_budget"
 PUBLIC_EXACT_ID = "pub_exact"
 
-# 公共作用域的整组避开仍由某位成员提交；该标记只用于定位旧行，不参与约束语义。
+# 公共作用域的整组避开仍由某位成员提交；归属只认该标记，不绑定数据库 owner。
 SOURCE_MEMBER_KEY = "_source_member_id"
+
+
+def proposer_member_id(row: ConfirmedConstraint) -> int | None:
+    """返回约束提出者；兼容早期把提出者写在 owner 列的历史行。"""
+    if row.kind == ConstraintKind.EXCLUDE_ITEM.value:
+        source = (row.payload or {}).get(SOURCE_MEMBER_KEY)
+        if source is not None:
+            return source
+    return row.owner_member_id
+
 
 _PUBLIC_CONDITION_KINDS = frozenset(
     {
@@ -43,12 +53,7 @@ def _deactivate_public_conditions(db: Session, negotiation_id: int) -> None:
         row.active = False
 
 
-def _deactivate_member_constraints(
-    db: Session,
-    negotiation_id: int,
-    member_id: int,
-    incoming_ids: set[str],
-) -> None:
+def _deactivate_member_constraints(db: Session, negotiation_id: int, member_id: int) -> None:
     """停用本人旧底线：成员级按 owner 停用，公共整组避开设提交来源停用。"""
     stmt = select(ConfirmedConstraint).where(
         ConfirmedConstraint.negotiation_id == negotiation_id,
@@ -64,8 +69,8 @@ def _deactivate_member_constraints(
         if source == member_id:
             row.active = False
         elif source is None:
-            # 兼容修复前写入的历史行：默认 ID 带成员前缀，或本次沿用同一自定义 ID。
-            if row.constraint_id.startswith(f"m{member_id}_") or row.constraint_id in incoming_ids:
+            # 兼容修复前写入的历史行：只认服务端生成、带本人前缀的默认 ID。
+            if row.constraint_id.startswith(f"m{member_id}_"):
                 row.active = False
 
 
@@ -100,6 +105,7 @@ def _insert(
         ConfirmedConstraint(
             negotiation_id=negotiation.id,
             constraint_id=constraint_id,
+            # 公共整组避开不绑定 owner，提出者只写入 payload 的 _source_member_id。
             owner_member_id=owner_member_id,
             scope=scope.value,
             kind=kind.value,
@@ -172,11 +178,7 @@ def confirm_member_constraints(
         )
 
     next_version = negotiation.constraint_version + 1
-    incoming_ids = {
-        draft.constraint_id or f"m{member.id}_{draft.kind.value}_{index}"
-        for index, draft in enumerate(command.constraints)
-    }
-    _deactivate_member_constraints(db, negotiation.id, member.id, incoming_ids)
+    _deactivate_member_constraints(db, negotiation.id, member.id)
 
     seen: set[str] = set()
     written: list[str] = []
@@ -186,6 +188,12 @@ def confirm_member_constraints(
         if constraint_id in seen:
             raise invalid("CONSTRAINT_ID_DUPLICATE", "constraint_id 不能重复")
         seen.add(constraint_id)
+        collision = db.scalars(select(ConfirmedConstraint).where(
+            ConfirmedConstraint.negotiation_id == negotiation.id,
+            ConfirmedConstraint.constraint_id == constraint_id,
+        )).first()
+        if collision is not None and proposer_member_id(collision) != member.id:
+            raise invalid("CONSTRAINT_ID_INVALID", "请使用本人底线标识")
         kind = ConstraintKind(draft.kind.value)
         # 整组避开是公共约束，必须整组生效且不得绑定成员；
         # 本人不参与与替代要求才是成员级底线，两条路径互不替代。
@@ -233,8 +241,8 @@ def invalidate_confirmations(
             ResultConfirmation.negotiation_id == negotiation.id
         )
     ).all()
-    for row in rows:
-        db.delete(row)
+    # 不删除确认历史；有效性由 decision_config_version 与 result_version 决定。
+    rows = [row for row in rows if row.decision_config_version != negotiation.decision_config_version]
     if rows:
         from app.engine.events import append_event
 

@@ -98,7 +98,7 @@ def confirm_constraints(
     client: TextLlmClient = Depends(get_text_llm_client),
     db: Session = Depends(get_db),
 ) -> MyStateView:
-    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True)
+    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True, populate_existing=True)
     if negotiation is None:
         require_negotiation(db, negotiation_id)
     if negotiation.status not in {
@@ -113,7 +113,7 @@ def confirm_constraints(
         raise conflict("CONSTRAINTS_LOCKED", f"当前状态 {negotiation.status} 不能修改底线")
 
     confirm_member_constraints(db, negotiation, member, command)
-    db.commit()
+    db.flush()
 
     members = db.scalars(
         select(Member).where(
@@ -123,7 +123,7 @@ def confirm_constraints(
     open_round = negotiation.status in ANSWER_OPEN_STATUSES
     if all(row.bottomline_status != "pending" for row in members) and not open_round:
         start_round(db, negotiation, actor_member_id=member.id)
-        db.commit()
+    db.commit()
     return build_my_view(db, negotiation, member, llm_client=client)
 
 
@@ -163,7 +163,7 @@ def revise(
     client: TextLlmClient = Depends(get_text_llm_client),
     db: Session = Depends(get_db),
 ) -> MyStateView:
-    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True)
+    negotiation = db.get(Negotiation, negotiation_id, with_for_update=True, populate_existing=True)
     if negotiation is None:
         require_negotiation(db, negotiation_id)
 

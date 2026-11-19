@@ -274,7 +274,7 @@ export function deriveMessages(
       id: "final",
       side: "yi",
       kind: "text",
-      text: "所有人都明确接受了这一版。这次的结果代表全员同意，协商完成。",
+      text: "当前参与成员都明确接受了这一版。确认范围不含已离开或被移除成员，历史异议继续保留。",
     });
   }
   if (pub.status === "CLOSED_WITH_CONCERN") {

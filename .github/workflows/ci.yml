@@ -1,0 +1,34 @@
+name: Reproduce and verify
+on: [push, pull_request]
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # 固定 3.12.x 补丁版本无法同时覆盖两个平台：3.12.11+ 无 windows 构建
+          # （3.12.14 仅 linux/rhel），而 ubuntu-latest 已迁移 26.04、无任何 3.12.x
+          # 的 26.04 清单构建（ubuntu 依赖镜像自带缓存命中 3.12.14）。
+          # 用浮动版本让 setup-python 按平台自动解析可用版本。
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: python -m pip install -r backend/requirements.lock.txt
+      - run: python -m pip check
+      - run: python -m pytest -q
+      - run: python backend/scripts/contract_snapshot.py --check
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend

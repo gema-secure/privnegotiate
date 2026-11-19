@@ -6,24 +6,18 @@ import AppIcon from "../components/AppIcon.vue";
 import AttributeChips from "../components/AttributeChips.vue";
 import { api, errorMessage } from "../api";
 import { yuan } from "../format";
-import { loadSession, session } from "../session";
+import { useNegotiationState } from "../useNegotiationState";
 import type {
   AttributeState,
   BottomlineParse,
   BottomlineProposal,
-  MyState,
-  PublicNegotiation,
 } from "../types";
 
 const route = useRoute();
 const router = useRouter();
 const id = Number(route.params.id);
-loadSession(id);
+const { pub, me, loading, error, token, refresh: refreshState } = useNegotiationState(id, {});
 
-const me = ref<MyState | null>(null);
-const pub = ref<PublicNegotiation | null>(null);
-const loading = ref(true);
-const error = ref("");
 const submitting = ref(false);
 
 const exclude = ref<string[]>([]);
@@ -161,7 +155,6 @@ function applyProposals() {
     : "已填入下方表单。请逐条核对，确认无误后再点击「确认底线」提交。";
 }
 
-const token = computed(() => session.current?.token ?? null);
 const categories = computed(() => {
   const values = new Set((pub.value?.candidates ?? []).map((item) => item.category));
   return [...values];
@@ -224,24 +217,8 @@ function selectNoExtra() {
 }
 
 async function refresh() {
-  if (!token.value) {
-    loading.value = false;
-    return;
-  }
-  error.value = "";
-  try {
-    const [myState, publicView] = await Promise.all([
-      api.myState(id, token.value),
-      api.publicView(id, token.value),
-    ]);
-    me.value = myState;
-    pub.value = publicView;
-    initialize();
-  } catch (err) {
-    error.value = errorMessage(err);
-  } finally {
-    loading.value = false;
-  }
+  await refreshState();
+  initialize();
 }
 
 async function submit() {

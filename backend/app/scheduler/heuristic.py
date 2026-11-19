@@ -112,7 +112,7 @@ def symmetric_difference_scores(
             continue
         chosen = set(challenger.candidate_ids)
         gap = max(0.0, challenger.excess or 0.0)
-        weight = 1.0 / (eta + gap)
+        weight = 1.0 / max(1e-12, eta + gap)
         for candidate_id in chosen ^ incumbent:
             if candidate_id in raw:
                 raw[candidate_id] = max(raw[candidate_id], weight)
@@ -206,7 +206,7 @@ def select_questions(
         lam = min(1.0, max(0.0, pool.lam))
         factor = 1.0
         if settings.use_fairness_factor:
-            factor = min(4.0, max(0.25, (1.0 - lam) + lam / (settings.epsilon + incumbent_utility)))
+            factor = min(4.0, max(0.25, (1.0 - lam) + lam / max(1e-12, settings.epsilon + incumbent_utility)))
         load = (
             loads.get(member_id, 0.0)
             if loads is not None
