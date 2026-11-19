@@ -51,7 +51,7 @@ backend/
     llm/           MaaS 三入口（可整体关闭）
     workers/       outbox → Redis 投影 worker
     simulation/    模拟实验：生成器、作答者、指标、网格
-    tests/         pytest 测试（223 项）
+    tests/         pytest 测试（238 项）
   alembic/         数据库迁移
   Dockerfile
 frontend/
@@ -122,7 +122,7 @@ npm test
 npm run build
 ```
 
-当前基线：223 项全部通过，覆盖约束编译、n≤12 全枚举对照、偏好数值检查、权限越权、幂等与失败路径，以及公共进度接口的访问边界（`test_public_access.py`）。
+当前基线：238 项全部通过，覆盖约束编译、n≤12 全枚举对照、偏好数值检查、权限越权、幂等与失败路径，以及公共进度接口的访问边界（`test_public_access.py`）。
 
 ## 模拟实验
 
