@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.engine.attributes import candidate_attribute_rows
+from app.engine.constraints_service import proposer_member_id
 from app.engine.loading import (
     attribute_state_map,
     candidate_dtos,
@@ -294,13 +295,16 @@ def build_my_view(
             ),
         )
 
-    constraints = db.scalars(
-        select(ConfirmedConstraint).where(
-            ConfirmedConstraint.negotiation_id == negotiation.id,
-            ConfirmedConstraint.owner_member_id == member.id,
-            ConfirmedConstraint.active.is_(True),
-        )
-    ).all()
+    constraints = [
+        row
+        for row in db.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == negotiation.id,
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+        if proposer_member_id(row) == member.id
+    ]
     my_constraints = [
         MyConstraintView(
             constraint_id=row.constraint_id,

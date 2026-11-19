@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from app.engine.closing import begin_round_close, commit_round, compute_round
+from app.engine.constraints_service import proposer_member_id
 from app.engine.loading import active_answers, constraint_dtos, member_dtos, candidate_dtos
 from app.engine.state import EngineError
 from app.models.business import (
@@ -199,9 +200,19 @@ def test_departed_constraints_scoped_access_and_shared_exclusions(api):
     own = retained.json()["constraints"][0]["constraint_id"]
     with factory() as db:
         assert all(a.member_id != ids[3] for a in active_answers(db, nid))
-        own_rows = db.scalars(select(ConfirmedConstraint).where(ConfirmedConstraint.owner_member_id == ids[3])).all()
-        assert {r.kind for r in own_rows if r.active} == {"exclude_item"}
-        other = db.scalars(select(ConfirmedConstraint).where(ConfirmedConstraint.owner_member_id == ids[2], ConfirmedConstraint.active.is_(True))).one()
+        rows = db.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == nid,
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+        exclude_rows = [r for r in rows if r.kind == "exclude_item"]
+        assert all(r.owner_member_id is None for r in exclude_rows), "整组避开的提出者只记在 payload"
+        own_rows = [r for r in rows if proposer_member_id(r) == ids[3]]
+        assert {r.kind for r in own_rows} == {"exclude_item"}
+        other = next(
+            r for r in exclude_rows if proposer_member_id(r) == ids[2]
+        )
         other_id = other.constraint_id
     payload = {"expected_preference_version": retained.json()["preference_version"], "acknowledged": True}
     assert client.post(f"/negotiations/{nid}/me/retained-constraints/{other_id}/withdraw", headers=headers[3], json=payload).status_code == 404
@@ -211,6 +222,51 @@ def test_departed_constraints_scoped_access_and_shared_exclusions(api):
     assert "c01" not in public["recommendation"]["candidate_ids"]
     assert client.post(f"/negotiations/{nid}/me/revoke-token", headers=headers[3]).status_code == 204
     assert client.get(f"/negotiations/{nid}/me/retained-constraints", headers=headers[3]).status_code == 401
+
+
+def test_custom_constraint_id_cannot_claim_legacy_row(api):
+    """客户端传入同名 ID 不能认领无来源的历史整组避开。"""
+    client, factory = api
+    nid, headers, ids, _ = group(client)
+    with factory() as db:
+        db.add(
+            ConfirmedConstraint(
+                negotiation_id=nid,
+                constraint_id="shared_custom",
+                owner_member_id=None,
+                scope="public",
+                kind="exclude_item",
+                payload={"candidate_ids": ["c01"]},
+                confirmed_version=0,
+                active=True,
+            )
+        )
+        db.commit()
+    response = client.post(
+        f"/negotiations/{nid}/me/constraints",
+        headers=headers[1],
+        json={
+            "constraints": [
+                {
+                    "kind": "exclude_item",
+                    "candidate_ids": ["c02"],
+                    "constraint_id": "shared_custom",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "CONSTRAINT_ID_INVALID"
+    with factory() as db:
+        rows = db.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == nid,
+                ConfirmedConstraint.constraint_id == "shared_custom",
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+        assert len(rows) == 1
+        assert rows[0].payload["candidate_ids"] == ["c01"]
 
 
 def test_departure_invalidates_computing_snapshot_and_old_batches(api):

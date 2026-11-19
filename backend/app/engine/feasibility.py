@@ -25,9 +25,18 @@ class RoundStartResult:
 
 
 def start_round(
-    db: Session, negotiation: Negotiation, *, actor_member_id: int | None = None, ranking=None
+    db: Session,
+    negotiation: Negotiation,
+    *,
+    actor_member_id: int | None = None,
+    ranking=None,
+    extra_rounds: int = 0,
+    abort_on_no_questions: bool = False,
+    on_publish=None,
 ) -> RoundStartResult:
     negotiation = db.get(Negotiation, negotiation.id, with_for_update=True, populate_existing=True)
+    origin_status = negotiation.status
+    origin_frozen = negotiation.membership_frozen
     members = db.scalars(select(Member).where(
         Member.negotiation_id == negotiation.id, Member.active.is_(True)
     )).all()
@@ -37,6 +46,7 @@ def start_round(
         append_event(db, negotiation, "FEASIBILITY_CHECKED", {
             "status": negotiation.status, "outcome": "bottomline_pending" if members else "no_members",
         }, actor_member_id=actor_member_id)
+        db.commit()
         return RoundStartResult(
             negotiation.status,
             negotiation.round_no,
@@ -64,12 +74,16 @@ def start_round(
         created = create_round_batches(db, negotiation, round_no=next_round,
             candidates=snapshot.candidates, members=snapshot.members,
             constraints=snapshot.constraints, ranking=ranking, plan=computation.question_plan)
-        negotiation.status = "ASKING" if created else "BEST_EFFORT"
         if created:
+            negotiation.status = "ASKING"
             negotiation.round_no = next_round
             message = f"第 {next_round} 轮问题已发出"
         else:
             reason = "no_questions"
+            # 明确放弃继续时回到开轮前状态，避免 409 留下 CHECKING_FEASIBILITY 或假开局。
+            negotiation.status = origin_status if abort_on_no_questions else "BEST_EFFORT"
+            if abort_on_no_questions:
+                negotiation.membership_frozen = origin_frozen
             message = "所有可选候选都已被成员评价，没有新的可作答题"
     elif computation.outcome == "infeasible":
         negotiation.status = "INFEASIBLE"
@@ -80,18 +94,24 @@ def start_round(
         reason = "solver_retry"
         message = "求解未完成，请重试或复查"
 
-    append_event(db, negotiation, "FEASIBILITY_CHECKED", {
-        "outcome": computation.solver_status or computation.outcome,
-        "status": negotiation.status,
-        "round_no": negotiation.round_no,
-        "round_issued": reason == "issued",
-        "reason": reason,
-    }, actor_member_id=actor_member_id)
-    db.commit()
-    return RoundStartResult(
+    result = RoundStartResult(
         negotiation.status,
         negotiation.round_no,
         reason == "issued",
         reason,
         message,
     )
+    if result.round_issued and extra_rounds > 0:
+        # 追加轮数必须与决策记录、新轮发布同事务提交。
+        negotiation.round_limit += extra_rounds
+    if on_publish is not None:
+        on_publish(negotiation, result)
+    append_event(db, negotiation, "FEASIBILITY_CHECKED", {
+        "outcome": computation.solver_status or computation.outcome,
+        "status": negotiation.status,
+        "round_no": negotiation.round_no,
+        "round_issued": result.round_issued,
+        "reason": reason,
+    }, actor_member_id=actor_member_id)
+    db.commit()
+    return result

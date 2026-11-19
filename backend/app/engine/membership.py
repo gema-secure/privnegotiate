@@ -4,8 +4,10 @@ from dataclasses import replace
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.engine.constraints_service import proposer_member_id
 from app.engine.events import append_event
-from app.engine.state import TERMINAL_STATUSES, EngineError, conflict, forbidden, not_found, utc_aware
+from app.engine.participation import require_participant
+from app.engine.state import TERMINAL_STATUSES, conflict, forbidden, not_found, utc_aware
 from app.models.business import (
     ConfirmedConstraint, Member, Negotiation, QuestionAnswer, QuestionBatch,
     RemovalRequest, ResultConfirmation, utcnow,
@@ -21,14 +23,6 @@ def lock_negotiation(db: Session, negotiation_id: int) -> Negotiation:
     if negotiation is None:
         raise not_found("NEGOTIATION_NOT_FOUND", "协商不存在")
     return negotiation
-
-
-def require_participant(db: Session, negotiation: Negotiation, member: Member) -> Member:
-    member = db.get(Member, member.id, with_for_update=True, populate_existing=True)
-    if (member is None or member.negotiation_id != negotiation.id or not member.active
-            or member.token_revoked or member.membership_status in {"LEFT", "REMOVED"}):
-        raise EngineError("UNAUTHORIZED", "参与权限已失效", 401)
-    return member
 
 
 def _mutable(negotiation: Negotiation, version: int) -> None:
@@ -99,21 +93,18 @@ def _reconcile(db: Session, negotiation: Negotiation, actor_id: int, *, owner_le
 def _depart(db: Session, negotiation: Negotiation, target: Member, actor: Member, status: str) -> None:
     before = target.membership_status
     previous_result = negotiation.active_result_version
-    owned = db.scalars(select(ConfirmedConstraint).where(
+    active_constraints = db.scalars(select(ConfirmedConstraint).where(
         ConfirmedConstraint.negotiation_id == negotiation.id,
-        ConfirmedConstraint.owner_member_id == target.id,
         ConfirmedConstraint.active.is_(True),
     )).all()
+    owned = [row for row in active_constraints if proposer_member_id(row) == target.id]
     target.membership_status = status
     target.active = False
     # 整组禁选保留。个人限制仅退出当前有效集合，原 payload 留存审计。
-    for constraint in db.scalars(select(ConfirmedConstraint).where(
-        ConfirmedConstraint.negotiation_id == negotiation.id,
-        ConfirmedConstraint.owner_member_id == target.id,
-        ConfirmedConstraint.active.is_(True),
-        ConfirmedConstraint.kind.in_(["opt_out", "require_count"]),
-    )).all():
-        constraint.active = False
+    for constraint in active_constraints:
+        if (constraint.owner_member_id == target.id
+                and constraint.kind in ("opt_out", "require_count")):
+            constraint.active = False
     negotiation.membership_version += 1
     negotiation.decision_config_version += 1
     negotiation.constraint_version += 1
@@ -290,14 +281,15 @@ def return_to_active(db: Session, negotiation_id: int, actor: Member) -> None:
 def retained_view(db: Session, actor: Member) -> RetainedConstraintsView:
     rows = db.scalars(select(ConfirmedConstraint).where(
         ConfirmedConstraint.negotiation_id == actor.negotiation_id,
-        ConfirmedConstraint.owner_member_id == actor.id, ConfirmedConstraint.active.is_(True),
+        ConfirmedConstraint.active.is_(True),
         ConfirmedConstraint.kind == "exclude_item",
     )).all()
     return RetainedConstraintsView(
         membership_status=actor.membership_status, preference_version=actor.preference_version,
         constraints=[MyConstraintView(constraint_id=r.constraint_id, kind=r.kind,
             candidate_ids=list(r.payload.get("candidate_ids", [])),
-            confirmed_version=r.confirmed_version) for r in rows],
+            confirmed_version=r.confirmed_version)
+            for r in rows if proposer_member_id(r) == actor.id],
     )
 
 
@@ -307,12 +299,12 @@ def withdraw_retained(db: Session, negotiation_id: int, actor: Member, constrain
         raise conflict("NEGOTIATION_CLOSED", "协商已结束，历史结果不能修改")
     if actor.preference_version != command.expected_preference_version:
         raise conflict("PREFERENCE_VERSION_CONFLICT", "本人保留禁忌已变化，请刷新")
-    row = db.scalars(select(ConfirmedConstraint).where(
+    rows = db.scalars(select(ConfirmedConstraint).where(
         ConfirmedConstraint.negotiation_id == negotiation.id,
-        ConfirmedConstraint.owner_member_id == actor.id,
         ConfirmedConstraint.constraint_id == constraint_id,
         ConfirmedConstraint.kind == "exclude_item", ConfirmedConstraint.active.is_(True),
-    )).one_or_none()
+    )).all()
+    row = next((item for item in rows if proposer_member_id(item) == actor.id), None)
     if row is None:
         raise not_found("CONSTRAINT_NOT_FOUND", "本人保留的整组禁忌不存在")
     row.active = False

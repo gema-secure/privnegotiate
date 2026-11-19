@@ -24,6 +24,7 @@ from app.engine.batches import (
     reopen_batches,
 )
 from app.engine.events import append_event
+from app.engine.participation import require_participant
 from app.engine.loading import (
     active_answers,
     answer_observations,
@@ -174,7 +175,6 @@ def begin_round_close(
 ) -> RoundSnapshot:
     """第一阶段事务：标 CLOSING、冻结截止与版本；迟到回答此后被拒绝。"""
     negotiation = db.get(Negotiation, negotiation.id, with_for_update=True, populate_existing=True)
-    from app.engine.membership import require_participant
     actor = require_participant(db, negotiation, actor)
     job_status = "CHECKING_FEASIBILITY" if initial else "CLOSING"
     event_type = "FEASIBILITY_CHECKING" if initial else "ROUND_CLOSING"

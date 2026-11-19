@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.engine.events import append_event
+from app.engine.participation import require_participant
 from app.engine.state import conflict, invalid, not_found
 from app.models.business import Member, Negotiation, QuestionAnswer, QuestionBatch, utcnow
 
@@ -45,7 +46,6 @@ def submit_answer(
     negotiation = db.get(Negotiation, negotiation_id, with_for_update=True, populate_existing=True)
     if negotiation is None:
         raise not_found("NEGOTIATION_NOT_FOUND", "协商不存在")
-    from app.engine.membership import require_participant
     member = require_participant(db, negotiation, member)
     batch = db.scalars(
         select(QuestionBatch)

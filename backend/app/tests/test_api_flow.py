@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.engine.batches import mark_batches_closed, reopen_batches
 from app.engine.closing import PreviousResult, RoundSnapshot, _stable_count
 from app.models.business import (
     ConfirmedConstraint,
+    InitiatorDecision,
     Member,
     Negotiation,
     QuestionBatch,
@@ -572,7 +573,8 @@ def test_group_exclude_is_public_and_applies_to_every_member(api):
     opt_out_rows = [row for row in rows if row.kind == "opt_out"]
     assert len(exclude_rows) == 1, "整组避开应作为一条公共约束落库"
     assert exclude_rows[0].scope == "public"
-    assert exclude_rows[0].owner_member_id == initiator.id
+    assert exclude_rows[0].owner_member_id is None, "公共整组避开不绑定数据库 owner"
+    assert exclude_rows[0].payload["_source_member_id"] == initiator.id
     assert set(exclude_rows[0].payload["candidate_ids"]) == set(group_excluded)
     assert len(opt_out_rows) == 1, "本人不参与应保持成员级约束"
     assert opt_out_rows[0].scope == "member"
@@ -653,7 +655,8 @@ def test_resubmitting_bottomline_replaces_public_group_exclude(api):
     opt_out_rows = [row for row in rows if row.kind == "opt_out"]
     assert len(exclude_rows) == 1, "公共整组避开只应保留一条 active 记录"
     assert exclude_rows[0].scope == "public"
-    assert exclude_rows[0].owner_member_id is not None, "整组避开保留提出者，用于本人撤回"
+    assert exclude_rows[0].owner_member_id is None, "公共整组避开不绑定数据库 owner"
+    assert exclude_rows[0].payload["_source_member_id"] is not None, "提出者记在 payload 来源字段"
     assert len(opt_out_rows) == 1, "成员级约束也只应保留一条 active 记录"
 
     finished = client.post(
@@ -735,6 +738,17 @@ def test_continue_without_new_questions_is_explicit(api):
         negotiation = session.get(Negotiation, negotiation_id)
         assert negotiation.round_limit == 2, "没有发出新轮时不得静默增加轮数"
         assert negotiation.status == "BEST_EFFORT"
+        assert session.scalar(
+            select(func.count(InitiatorDecision.id)).where(
+                InitiatorDecision.negotiation_id == negotiation_id
+            )
+        ) == 0, "409 不得落“已继续”的决策记录"
+        assert session.scalar(
+            select(func.count(QuestionBatch.id)).where(
+                QuestionBatch.negotiation_id == negotiation_id,
+                QuestionBatch.round_no == 2,
+            )
+        ) == 0, "409 不得留下新一轮题包"
 
     adjusted = client.post(
         f"/negotiations/{negotiation_id}/organizer/decision",
@@ -769,3 +783,19 @@ def test_continue_without_new_questions_is_explicit(api):
         ).all()
         assert len(budgets) == 1
         assert budgets[0].payload["amount_cents"] == 1900
+        excludes = session.scalars(
+            select(ConfirmedConstraint).where(
+                ConfirmedConstraint.negotiation_id == negotiation_id,
+                ConfirmedConstraint.kind == "exclude_item",
+                ConfirmedConstraint.active.is_(True),
+            )
+        ).all()
+        assert len(excludes) == 1, "公共条件替换不得停用整组避开"
+        assert set(excludes[0].payload["candidate_ids"]) == set(excluded)
+        decisions = session.scalars(
+            select(InitiatorDecision).where(
+                InitiatorDecision.negotiation_id == negotiation_id
+            )
+        ).all()
+        assert len(decisions) == 1, "调整后返回结果时必须留下决策记录"
+        assert decisions[0].extra_rounds is None, "未发出新轮不得记录追加轮数"

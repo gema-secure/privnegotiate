@@ -11,6 +11,7 @@ from app.engine.constraints_service import (
 )
 from app.engine.events import append_event
 from app.engine.feasibility import start_round
+from app.engine.participation import require_participant
 from app.engine.state import conflict, forbidden, invalid, not_found
 from app.models.business import (
     Concern,
@@ -29,7 +30,6 @@ def submit_confirmation(
     negotiation = db.get(Negotiation, negotiation_id, with_for_update=True, populate_existing=True)
     if negotiation is None:
         raise not_found("NEGOTIATION_NOT_FOUND", "协商不存在")
-    from app.engine.membership import require_participant
     member = require_participant(db, negotiation, member)
     if negotiation.status not in CONFIRM_STATUSES:
         raise conflict("NOT_IN_CONFIRMATION", f"当前状态 {negotiation.status} 不接受确认")
@@ -229,63 +229,76 @@ def organizer_decision(
         invalidate_confirmations(db, negotiation, reason="initiator_continue")
         # start_round 会以 populate_existing 重新加载协商行；先落盘，避免刚调整的公共条件被读回旧值。
         db.flush()
-        started = start_round(db, negotiation, actor_member_id=member.id)
+        published: dict[str, int | None] = {}
+
+        def publish(target: Negotiation, result) -> None:
+            if result.reason == "no_questions" and not adjusted:
+                # 纯追加轮数却没有新题：由调用方拒绝，不留决策记录。
+                return
+            applied_extra_rounds = command.extra_rounds if result.round_issued else None
+            published["extra_rounds"] = applied_extra_rounds
+            published["concern_id"] = concern.id if concern is not None else None
+            if concern is not None:
+                concern.status = "resolved"
+            else:
+                for row in db.scalars(
+                    select(Concern).where(
+                        Concern.negotiation_id == negotiation.id,
+                        Concern.status == "open",
+                    )
+                ).all():
+                    row.status = "resolved"
+            decision = InitiatorDecision(
+                negotiation_id=negotiation.id,
+                concern_id=concern.id if concern else None,
+                result_version=negotiation.active_result_version,
+                action="continue",
+                extra_rounds=applied_extra_rounds,
+                adjustments=(
+                    command.public_adjustment.model_dump(exclude_none=True)
+                    if command.public_adjustment
+                    else {}
+                ),
+                decided_by_member_id=member.id,
+            )
+            db.add(decision)
+            db.flush()
+            event = append_event(
+                db,
+                target,
+                "INITIATOR_DECISION",
+                {
+                    "action": "continue",
+                    "requested_extra_rounds": command.extra_rounds,
+                    "applied_extra_rounds": applied_extra_rounds,
+                    "adjusted": adjusted,
+                    "round_issued": result.round_issued,
+                    "reason": result.reason,
+                    "round_no": target.round_no,
+                },
+                actor_member_id=member.id,
+            )
+            decision.event_id = event.id
+
+        started = start_round(
+            db,
+            negotiation,
+            actor_member_id=member.id,
+            extra_rounds=command.extra_rounds or 0,
+            abort_on_no_questions=not adjusted,
+            on_publish=publish,
+        )
         if started.reason == "no_questions" and not adjusted:
-            # 只追加轮数、又没有可问的题：明确失败，不留下“已继续”的假成功。
+            # 状态已恢复到开轮前，且没有落决策记录，409 不留下“已继续”的中间态。
             raise conflict(
                 "NO_QUESTIONS_TO_ASK",
                 "所有可选候选都已被成员评价，追加轮数不会产生新的可作答题；"
                 "请调整公共条件后再继续。",
             )
-        applied_extra_rounds = command.extra_rounds if started.round_issued else None
-        if applied_extra_rounds:
-            negotiation.round_limit += applied_extra_rounds
-        if concern is not None:
-            concern.status = "resolved"
-        else:
-            for row in db.scalars(
-                select(Concern).where(
-                    Concern.negotiation_id == negotiation.id,
-                    Concern.status == "open",
-                )
-            ).all():
-                row.status = "resolved"
-        decision = InitiatorDecision(
-            negotiation_id=negotiation.id,
-            concern_id=concern.id if concern else None,
-            result_version=negotiation.active_result_version,
-            action="continue",
-            extra_rounds=applied_extra_rounds,
-            adjustments=(
-                command.public_adjustment.model_dump(exclude_none=True)
-                if command.public_adjustment
-                else {}
-            ),
-            decided_by_member_id=member.id,
-        )
-        db.add(decision)
-        db.flush()
-        event = append_event(
-            db,
-            negotiation,
-            "INITIATOR_DECISION",
-            {
-                "action": "continue",
-                "requested_extra_rounds": command.extra_rounds,
-                "applied_extra_rounds": applied_extra_rounds,
-                "adjusted": adjusted,
-                "round_issued": started.round_issued,
-                "reason": started.reason,
-                "round_no": negotiation.round_no,
-            },
-            actor_member_id=member.id,
-        )
-        decision.event_id = event.id
-        db.commit()
         return {
             "negotiation_status": negotiation.status,
             "action": "continue",
-            "concern_id": decision.concern_id,
+            "concern_id": published.get("concern_id"),
             "round_no": negotiation.round_no,
             "round_issued": started.round_issued,
             "outcome": _continue_outcome(started),
