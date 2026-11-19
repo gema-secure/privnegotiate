@@ -143,7 +143,15 @@ cd backend
   --scenarios size_d3_n13,size_d4_n20,size_d6_n30,cond_minority,cond_heterogeneous,cond_skip_30,cond_tight_budget,cond_k3 \
   --ablations lam0,lam5,lam75 --manipulation --workers 10 \
   --output ../experiments/lambda-curve-2026-10-26.json
+
+# 10–15 人规模补充
+../.venv/Scripts/python.exe -m app.simulation.grid --seeds 1001-1050 \
+  --strategies heuristic --policies honest \
+  --scenarios size_d10_n20,size_d12_n20,size_d15_n20 \
+  --workers 8 --output ../experiments/scale-10-15-50seeds-2026-11-19.json
 ```
+
+规模补充结果（50 seeds）：10/12/15 人平均遗憾 0.0099/0.0106/0.0079，硬约束违反 0，平均求解 0.055–0.065 秒。
 
 ## 当前状态与限制
 
